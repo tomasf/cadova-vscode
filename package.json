@@ -1,0 +1,146 @@
+{
+  "name": "cadova",
+  "displayName": "Cadova",
+  "description": "Build and preview Cadova models from VS Code.",
+  "version": "0.1.0",
+  "publisher": "tomasf",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tomasf/cadova-vscode"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:swift"
+  ],
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "cadova.preview",
+        "displayName": "Cadova Preview",
+        "selector": [
+          {
+            "filenamePattern": "*.3mf"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "cadova.buildModel",
+        "title": "Build Model",
+        "category": "Cadova"
+      },
+      {
+        "command": "cadova.buildAndPreviewModel",
+        "title": "Build and Preview Model",
+        "category": "Cadova"
+      },
+      {
+        "command": "cadova.rebuildPreview",
+        "title": "Rebuild Model",
+        "category": "Cadova",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "cadova.fitPreview",
+        "title": "Fit Model in View",
+        "category": "Cadova",
+        "icon": "$(screen-full)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "cadova.buildModel",
+          "when": "false"
+        },
+        {
+          "command": "cadova.buildAndPreviewModel",
+          "when": "false"
+        },
+        {
+          "command": "cadova.fitPreview",
+          "when": "activeCustomEditorId == cadova.preview"
+        },
+        {
+          "command": "cadova.rebuildPreview",
+          "when": "activeCustomEditorId == cadova.preview"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "cadova.rebuildPreview",
+          "when": "activeCustomEditorId == cadova.preview",
+          "group": "navigation"
+        },
+        {
+          "command": "cadova.fitPreview",
+          "when": "activeCustomEditorId == cadova.preview",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Cadova",
+      "properties": {
+        "cadova.swiftPath": {
+          "type": "string",
+          "default": "swift",
+          "description": "The swift executable used to build models."
+        },
+        "cadova.buildConfiguration": {
+          "type": "string",
+          "enum": [
+            "debug",
+            "release"
+          ],
+          "default": "debug",
+          "description": "The configuration models are built with. Release takes longer to compile but builds complex models faster."
+        },
+        "cadova.rebuildOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Rebuild the models open in previews whenever a Swift file in their package is saved."
+        },
+        "cadova.codeLens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show build actions above each model and project."
+        }
+      }
+    },
+    "keybindings": [
+      {
+        "command": "cadova.rebuildPreview",
+        "key": "ctrl+alt+r",
+        "mac": "cmd+alt+r",
+        "when": "activeCustomEditorId == cadova.preview"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "package": "npx @vscode/vsce package",
+    "vscode:prepublish": "npm run typecheck && node esbuild.mjs --production",
+    "sync-viewer": "node scripts/sync-viewer.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.10",
+    "@types/three": "^0.170.0",
+    "@types/vscode": "~1.75.0",
+    "esbuild": "^0.24.0",
+    "three": "^0.170.0",
+    "typescript": "^5.6.3"
+  }
+}
