@@ -243,6 +243,11 @@ class ModelViewer {
         new ResizeObserver(() => this.resize()).observe(this.container);
         this.resize();
 
+        // VS Code makes a preview the active editor when its page takes focus, but the navigation
+        // cancels presses on the view, which would keep it from doing that, so the view takes it
+        canvas.tabIndex = -1;
+        canvas.addEventListener("pointerdown", () => canvas.focus({ preventScroll: true }), { capture: true });
+
         // Anything the pointer or keyboard does could change what's shown, in the view or a menu over it
         for (const type of ["pointerdown", "pointermove", "pointerup", "wheel", "keydown", "keyup"]) {
             window.addEventListener(type, () => this.invalidate(), { capture: true, passive: true });
