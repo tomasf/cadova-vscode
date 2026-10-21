@@ -117,11 +117,11 @@ export class SurfacePicker {
         if (!model) return null;
         this.index(model);
         const hits = raycaster.intersectObjects([model, this.target.caps], true);
-        return hits.find((hit) => hit.object instanceof THREE.Mesh && SurfacePicker.shown(hit.object) && !this.cutAway(hit)) ?? null;
+        return hits.find((hit) => hit.object instanceof THREE.Mesh && SurfacePicker.shown(hit.object) && !this.isCutAway(hit)) ?? null;
     }
 
-    // A cut face lies on its own section's plane, so only the others can hide it
-    private cutAway(hit: THREE.Intersection): boolean {
+    /** Whether a hit is on something the sections cut away. A cut face lies on its own section's plane, so only the others can hide it. */
+    isCutAway(hit: THREE.Intersection): boolean {
         const own = hit.object.userData.sectionID;
         return this.target.sections.some((section) => section.id !== own && SectionGeometry.hides(section, hit.point, 1e-4));
     }

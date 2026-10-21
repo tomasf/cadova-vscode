@@ -108,6 +108,27 @@ class PartsButton {
 }
 
 /**
+ * The view's navigation, turning and zooming around the nearest surface you can see under the
+ * pointer, as in Cadova Viewer: not a hidden part or what a cross-section cuts away, and a cut face.
+ */
+class SectionAwareControls extends ViewportControls {
+    picker: SurfacePicker | null = null;
+
+    pivot(point: THREE.Vector2): THREE.Vector3 {
+        const surface = this.picker?.surfacePoint(point.x, point.y);
+        if (surface) return surface;
+        // Off the model, the customizer's own fallback, without its plain hit on the model
+        const meshes = this.meshes;
+        this.meshes = [];
+        try {
+            return super.pivot(point);
+        } finally {
+            this.meshes = meshes;
+        }
+    }
+}
+
+/**
  * The 3D view of one model file. It's put together from the web customizer's own viewer modules, the
  * way the customizer's page does it, so the two look and navigate the same, with view options from
  * Cadova Viewer on top.
@@ -126,7 +147,7 @@ class ModelViewer {
     private readonly viewportRenderer: ViewportRenderer;
     private readonly scene = new THREE.Scene();
     private readonly rig = new CameraRig();
-    private readonly controls: ViewportControls;
+    private readonly controls: SectionAwareControls;
     private readonly grid: ViewportGrid;
     // The grid hides itself when it's seen edge-on, so showing it is up to a group around it
     private readonly gridHolder = new THREE.Group();
@@ -169,7 +190,7 @@ class ModelViewer {
         this.container.append(this.renderer.domElement);
 
         this.scene.background = new THREE.Color(this.cssValue("--viewer"));
-        this.controls = new ViewportControls(this.rig.camera, this.renderer.domElement);
+        this.controls = new SectionAwareControls(this.rig.camera, this.renderer.domElement);
         setupLighting(this.scene, this.rig.camera, this.renderer);
 
         // The headlight rides on the camera, so it moves to whichever camera is in use
@@ -214,6 +235,7 @@ class ModelViewer {
         }, saved.measurements);
         this.scene.add(this.sections.view.group, this.measurements.group, this.sections.gizmo.root);
         this.picker = picker;
+        this.controls.picker = picker;
 
         // VS Code changes its theme by changing the body's classes
         new MutationObserver(() => this.updateColors()).observe(document.body, {
@@ -497,7 +519,8 @@ class ModelViewer {
 
     /**
      * The parts under a point in the window, nearest first, hidden ones included. As in Cadova Viewer,
-     * rays over a small circle around the point find small parts that a single ray would miss.
+     * rays over a small circle around the point find small parts that a single ray would miss, and
+     * they pass through what cross-sections cut away, but land on a part's cut faces.
      */
     private partsUnder(x: number, y: number): THREE.Object3D[] {
         const rect = this.renderer.domElement.getBoundingClientRect();
@@ -508,11 +531,17 @@ class ModelViewer {
             const angle = step / 8 * Math.PI * 2;
             return [x + Math.cos(angle) * radius, y + Math.sin(angle) * radius];
         })];
+        const caps = this.sections.view.capObjects.children;
+        const targets = new Map(this.parts.map((part) => {
+            const id = ModelViewer.partID(part);
+            return [part, [part, ...caps.filter((cap) => cap.userData.partID === id)]];
+        }));
         for (const [px, py] of points) {
             raycaster.setFromCamera(new THREE.Vector2((px - rect.left) / rect.width * 2 - 1, -((py - rect.top) / rect.height) * 2 + 1), this.rig.camera);
-            for (const part of this.parts) {
+            for (const [part, objects] of targets) {
                 // Three.js tests hidden objects too, but its lines' hits are too wide to count
-                const hit = raycaster.intersectObject(part, true).find((hit) => hit.object instanceof THREE.Mesh);
+                const hit = raycaster.intersectObjects(objects, true)
+                    .find((hit) => hit.object instanceof THREE.Mesh && !this.picker.isCutAway(hit));
                 if (hit && hit.distance < (distances.get(part) ?? Infinity)) distances.set(part, hit.distance);
             }
         }

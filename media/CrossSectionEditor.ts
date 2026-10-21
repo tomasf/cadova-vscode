@@ -45,6 +45,8 @@ export class CrossSectionEditor {
     private selected: string | null = null;
     private hovered: string | null = null;
     private drag: Drag | null = null;
+    // Where a press off the gizmo began while a section is selected, as it might be a click
+    private press: { x: number; y: number } | null = null;
     private shiftHeld = false;
     private readonly chips = document.getElementById("sections")!;
     private readonly bar = document.getElementById("section-bar")!;
@@ -155,9 +157,13 @@ export class CrossSectionEditor {
     // MARK: Gizmo dragging
 
     private pointerDown(event: PointerEvent) {
-        if (event.button !== 0 || !this.current?.enabled) return;
-        const handle = this.gizmo.handleAt(this.raycaster(event));
-        if (!handle) return;
+        this.press = null;
+        if (event.button !== 0 || event.ctrlKey || !this.current) return;
+        const handle = this.current.enabled ? this.gizmo.handleAt(this.raycaster(event)) : null;
+        if (!handle) {
+            this.press = { x: event.clientX, y: event.clientY };
+            return;
+        }
         // The view's navigation doesn't see this press
         event.stopImmediatePropagation();
         event.preventDefault();
@@ -203,6 +209,14 @@ export class CrossSectionEditor {
     }
 
     private pointerUp(event: PointerEvent) {
+        // As in Cadova Viewer, a click off the gizmo is done editing, rather than placing a measurement
+        const press = this.press;
+        this.press = null;
+        if (press && event.button === 0 && this.selected && Math.hypot(event.clientX - press.x, event.clientY - press.y) <= 4) {
+            event.stopImmediatePropagation();
+            this.select(null);
+            return;
+        }
         if (!this.drag || event.pointerId !== this.drag.pointer) return;
         this.drag = null;
         this.gizmo.setActive(null);
