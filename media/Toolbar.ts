@@ -18,6 +18,9 @@ export interface ToolbarActions {
     setOptions(options: ViewOptions): void;
     /** Opens the menu of what's shown, under a button. */
     showMenu(button: HTMLElement): void;
+    /** Whether measure mode is on, and turning it on or off. */
+    readonly measuring: boolean;
+    setMeasuring(on: boolean): void;
 }
 
 // Cadova Viewer's short titles for the standard views. Icons for them are too alike to tell apart at
@@ -35,6 +38,7 @@ const icons = {
     edgesNone: `<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" fill="currentColor" fill-opacity=".35" stroke="none"/>`,
     edgesSharp: `<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z M4 7.5l8 4.5 8-4.5 M12 12v9" fill="currentColor" fill-opacity=".2"/>`,
     info: `<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><circle cx="12" cy="7.75" r=".6" fill="currentColor"/>`,
+    measure: `<path d="M3.5 15.5l12-12 5 5-12 12z M7 12l1.5 1.5 M9.5 9.5l2 2 M12 7l1.5 1.5"/>`,
     show: `<path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>`,
     edgesAll: `<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z M4 7.5l8 4.5 8-4.5 M12 12v9 M4 7.5l8 13.5 M12 3v9 M20 7.5l-8 13.5 M4 16.5l16-9 M20 16.5l-16-9" stroke-width="1.1" fill="currentColor" fill-opacity=".2"/>`,
 };
@@ -70,6 +74,7 @@ export class Toolbar {
             this.choice("Sharp Edges", icons.edgesSharp, () => this.options.edges === "sharp", () => this.set({ edges: "sharp" })),
             this.choice("All Edges", icons.edgesAll, () => this.options.edges === "all", () => this.set({ edges: "all" })),
         ]);
+        this.group([this.choice("Measure", icons.measure, () => actions.measuring, () => actions.setMeasuring(!actions.measuring))]);
         // Things shown less often to change, such as the grid, are in a menu
         const show = this.button("Show", icons.show, () => actions.showMenu(show));
         show.setAttribute("aria-haspopup", "menu");
@@ -86,14 +91,15 @@ export class Toolbar {
         this.refresh();
     }
 
+    /** Shows state kept elsewhere, such as whether measure mode is on. */
+    refresh() {
+        for (const update of this.updates) update();
+    }
+
     set(change: Partial<ViewOptions>) {
         this.options = { ...this.options, ...change };
         this.refresh();
         this.actions.setOptions({ ...this.options });
-    }
-
-    private refresh() {
-        for (const update of this.updates) update();
     }
 
     private group(buttons: HTMLButtonElement[]): HTMLElement {

@@ -1,5 +1,7 @@
-// The Model Parts list in the sidebar, after Cadova Viewer's: a row for each part with its
-// thumbnail, its name and a checkmark that shows or hides it. Rows select like a VS Code list.
+// The Model view in the sidebar, after Cadova Viewer's: a row for each part with its thumbnail, its
+// name and a checkmark that shows or hides it, selecting like a VS Code list, and the measurements.
+
+import { Palette } from "./Palette";
 
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void };
 
@@ -9,17 +11,29 @@ interface Part {
     semantic: string;
 }
 
+interface Measurement {
+    id: string;
+    colorIndex: number;
+    start: [number, number, number];
+    end?: [number, number, number];
+    phase: "coordinate" | "inProgress" | "complete";
+}
+
 type HostMessage =
     | { type: "state"; file?: string; parts: Part[]; hidden: string[]; iconSize: string; thumbnails: Record<string, string> }
     | { type: "thumbnails"; thumbnails: Record<string, string> }
-    | { type: "iconSize"; size: string };
+    | { type: "iconSize"; size: string }
+    | { type: "measurements"; measurements: Measurement[] };
 
 const checkedIcon = `<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M4.8 8.2l2.1 2.1 4.3-4.6" fill="none" stroke="var(--vscode-button-foreground, white)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const uncheckedIcon = `<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>`;
+const deleteIcon = `<svg viewBox="0 0 16 16" aria-hidden="true" width="14" height="14"><circle cx="8" cy="8" r="6.5" fill="currentColor"/><path d="M5.8 5.8l4.4 4.4 M10.2 5.8l-4.4 4.4" stroke="var(--vscode-editorWidget-background, #252526)" stroke-width="1.5" stroke-linecap="round"/></svg>`;
 const placeholderIcon = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z M4 7.5l8 4.5 8-4.5 M12 12v9"/></svg>`;
 
+const vscode = acquireVsCodeApi();
+
 class PartsList {
-    private readonly vscode = acquireVsCodeApi();
+    private readonly vscode = vscode;
     private readonly element = document.getElementById("list")!;
     private file: string | undefined;
     private parts: Part[] = [];
@@ -243,4 +257,78 @@ class PartsList {
     }
 }
 
+/**
+ * The measurements, after Cadova Viewer's sidebar: a card for each in its color with the coordinates
+ * of its points, the difference between them and its length. Hovering one emphasizes it in the view.
+ */
+class MeasurementsList {
+    private readonly element = document.getElementById("measurements")!;
+    private readonly heading = document.getElementById("measurements-heading")!;
+    private shown = "";
+    // The count and the last one, and whether it has its end yet, to tell when one is added or finished
+    private latest = "";
+
+    constructor() {
+        window.addEventListener("message", ({ data }: MessageEvent<HostMessage>) => {
+            if (data.type === "measurements") this.render(data.measurements);
+        });
+        this.element.addEventListener("pointerleave", () => vscode.postMessage({ type: "hoverMeasurement", id: null }));
+    }
+
+    private render(measurements: Measurement[]) {
+        const shown = JSON.stringify(measurements);
+        if (shown === this.shown) return;
+        this.shown = shown;
+        this.element.hidden = this.heading.hidden = measurements.length === 0;
+        this.element.replaceChildren(...measurements.map((measurement) => this.card(measurement)));
+
+        // As in Cadova Viewer, the list scrolls to a measurement that's new, or that just got its end
+        const last = measurements.at(-1);
+        const latest = JSON.stringify([measurements.length, last?.id, !!last?.end]);
+        if (latest !== this.latest && last) this.element.lastElementChild?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        this.latest = latest;
+    }
+
+    private card(measurement: Measurement): HTMLElement {
+        const card = document.createElement("div");
+        card.className = "measurement";
+        card.style.setProperty("--measurement", Palette.css(measurement.colorIndex));
+        card.dataset.vscodeContext = JSON.stringify({
+            webviewSection: measurement.phase === "coordinate" ? "coordinate" : "measurement",
+            measurementId: measurement.id, preventDefaultContextMenuItems: true,
+        });
+        const cell = (className: string, text: string) => Object.assign(document.createElement("span"), { className, textContent: text });
+        const row = (label: string, point: number[]) => [cell("label", label), ...point.map((value) => cell("value", MeasurementsList.format(value)))];
+
+        card.append(cell("label", ""), ...["X", "Y", "Z"].map((axis) => cell("axis", axis)), ...row("A", measurement.start));
+        const end = measurement.end;
+        if (end) {
+            const delta = end.map((value, axis) => value - measurement.start[axis]);
+            card.append(...row("B", end), cell("rule", ""), ...row("Δ", delta));
+            const length = document.createElement("div");
+            length.className = "length";
+            length.append(cell("", "Length"), cell("value", MeasurementsList.format(Math.hypot(...delta))));
+            card.append(length);
+        }
+        // The point under the pointer can't be deleted; it's only where the pointer is
+        if (measurement.phase !== "coordinate") {
+            const remove = document.createElement("button");
+            remove.className = "delete";
+            remove.title = "Delete Measurement (Option-click to delete all)";
+            remove.innerHTML = deleteIcon;
+            remove.addEventListener("click", (event) => {
+                vscode.postMessage({ type: "deleteMeasurement", id: measurement.id, all: event.altKey });
+            });
+            card.append(remove);
+        }
+        card.addEventListener("pointerenter", () => vscode.postMessage({ type: "hoverMeasurement", id: measurement.id }));
+        return card;
+    }
+
+    private static format(value: number): string {
+        return value.toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+    }
+}
+
 new PartsList();
+new MeasurementsList();

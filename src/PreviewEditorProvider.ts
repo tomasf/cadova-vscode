@@ -16,6 +16,15 @@ export interface ModelPart {
     semantic: string;
 }
 
+/** A measurement in a preview: a point, or a length between two, with its color by number. */
+export interface Measurement {
+    id: string;
+    colorIndex: number;
+    start: [number, number, number];
+    end?: [number, number, number];
+    phase: "coordinate" | "inProgress" | "complete";
+}
+
 /** The parts of the model in a preview, which of them it hides, and the pictures of them drawn so far. */
 export interface PreviewParts {
     file: vscode.Uri;
@@ -39,6 +48,10 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
     private readonly activeThumbnailsChange = new vscode.EventEmitter<Record<string, string>>();
     /** Fires with new pictures of the active preview's parts, by part ID, as they're drawn. */
     readonly onDidRenderActiveThumbnails = this.activeThumbnailsChange.event;
+    private readonly measurementsByPanel = new WeakMap<vscode.WebviewPanel, Measurement[]>();
+    private readonly activeMeasurementsChange = new vscode.EventEmitter<void>();
+    /** Fires when the active preview's measurements change, including the point under the pointer. */
+    readonly onDidChangeActiveMeasurements = this.activeMeasurementsChange.event;
 
     private static readonly optionsKey = "cadova.previewOptions";
 
@@ -82,6 +95,24 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
     /** Outlines a part in the active preview, or none. */
     highlightPart(id: string | null) {
         this.activePanel?.webview.postMessage({ type: "highlightPart", id });
+    }
+
+    /** The active preview's measurements, with the point under the pointer last while measuring. */
+    get activeMeasurements(): Measurement[] {
+        return (this.activePanel && this.measurementsByPanel.get(this.activePanel)) ?? [];
+    }
+
+    /** Emphasizes a measurement in the active preview, or none. */
+    highlightMeasurement(id: string | null) {
+        this.activePanel?.webview.postMessage({ type: "highlightMeasurement", id });
+    }
+
+    deleteMeasurement(id: string) {
+        this.activePanel?.webview.postMessage({ type: "deleteMeasurement", id });
+    }
+
+    deleteAllMeasurements() {
+        this.activePanel?.webview.postMessage({ type: "deleteAllMeasurements" });
     }
 
     /** Centers the active preview's view on some parts. */
@@ -163,6 +194,10 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
                     this.partsByPanel.set(panel, { file: document.uri, parts: message.parts, hidden: message.hidden, thumbnails });
                     if (panel === this.activePanel) this.activePartsChange.fire();
                 }
+                if (message.type === "measurements") {
+                    this.measurementsByPanel.set(panel, message.measurements);
+                    if (panel === this.activePanel) this.activeMeasurementsChange.fire();
+                }
                 if (message.type === "thumbnails") {
                     const parts = this.partsByPanel.get(panel);
                     if (parts) Object.assign(parts.thumbnails, message.thumbnails);
@@ -187,6 +222,7 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
         if (panel === this.activePanel) return;
         this.activePanel = panel;
         this.activePartsChange.fire();
+        this.activeMeasurementsChange.fire();
     }
 
     // Views about previews, such as the parts list, show while one is open
@@ -303,6 +339,77 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
         width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5;
         stroke-linecap: round; stroke-linejoin: round;
     }
+    /* Cross-sections: a chip for each in the view's top left corner, after Cadova Viewer's */
+    #sections { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }
+    #sections[hidden] { display: none; }
+    #sections > * { pointer-events: auto; }
+    .section-chip {
+        --chip-check: #000; display: flex; height: 28px; border-radius: 8px; overflow: hidden;
+        background: color-mix(in srgb, var(--vscode-editorWidget-background, var(--panel)) 80%, transparent);
+        backdrop-filter: blur(12px); color: var(--section);
+    }
+    .section-chip button {
+        border: none; background: none; color: inherit; cursor: pointer; display: grid; place-items: center;
+        height: 100%; padding: 0 4px 0 7px;
+    }
+    .section-chip button.scissors { padding: 0 7px 0 4px; }
+    .section-chip svg { width: 15px; height: 15px; }
+    .section-chip.disabled button.scissors { opacity: .6; }
+    .section-chip.selected { background: var(--section); color: #000; --chip-check: var(--section); }
+    .section-add {
+        height: 28px; padding: 0 7px; margin-left: 4px; border-radius: 8px; cursor: pointer; display: grid; place-items: center;
+        border: 1px dashed var(--vscode-descriptionForeground, #9c9a94); color: var(--vscode-descriptionForeground, #9c9a94);
+        background: color-mix(in srgb, var(--vscode-editorWidget-background, var(--panel)) 40%, transparent);
+    }
+    .section-add svg { width: 19px; height: 15px; }
+    /* The selected section's controls, along the bottom like Cadova Viewer's editing bar */
+    #section-bar {
+        position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); max-width: calc(100% - 32px);
+        display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px;
+        background: color-mix(in srgb, var(--vscode-editorWidget-background, var(--panel)) 85%, transparent);
+        backdrop-filter: blur(12px); border: 1px solid var(--vscode-editorWidget-border, var(--vscode-widget-border, var(--line)));
+        color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, var(--text)));
+        font-family: var(--vscode-font-family, system-ui, -apple-system, "Segoe UI", sans-serif); font-size: 12px;
+    }
+    #section-bar[hidden] { display: none; }
+    #section-bar ~ #status { bottom: 16px; }
+    #section-bar:not([hidden]) ~ #status { bottom: 132px; }
+    .bar-title { font-size: 13px; }
+    .bar-controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 22px; }
+    .bar-control { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .bar-row { display: flex; align-items: center; gap: 6px; height: 24px; }
+    .bar-label { font-size: 10.5px; color: var(--vscode-descriptionForeground, #9c9a94); min-height: 13px; }
+    #section-bar button {
+        height: 24px; min-width: 24px; padding: 0 9px; border-radius: 4px; cursor: pointer; font: inherit;
+        color: var(--vscode-button-secondaryForeground, var(--text)); background: var(--vscode-button-secondaryBackground, rgba(128, 128, 128, .25));
+        border: 1px solid var(--vscode-button-border, transparent);
+    }
+    #section-bar button:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground, rgba(128, 128, 128, .35)); }
+    #section-bar button:disabled { opacity: .4; cursor: default; }
+    #section-bar button.primary { color: var(--vscode-button-foreground, #fff); background: var(--vscode-button-background, #0078d4); }
+    #section-bar button.primary:hover { background: var(--vscode-button-hoverBackground, #026ec1); }
+    #section-bar button.bar-delete { padding: 0 5px; display: grid; place-items: center; }
+    #section-bar button.bar-delete svg { width: 15px; height: 15px; }
+    #section-bar .switch {
+        appearance: none; width: 30px; height: 17px; margin: 0; border-radius: 9px; cursor: pointer; position: relative;
+        background: rgba(128, 128, 128, .45); transition: background .15s;
+    }
+    #section-bar .switch::after {
+        content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff; transition: left .15s;
+    }
+    #section-bar .switch:checked { background: var(--vscode-button-background, #0078d4); }
+    #section-bar .switch:checked::after { left: 15px; }
+    /* Measuring: a crosshair, and the length being measured next to it */
+    #viewer canvas.measuring { cursor: crosshair; }
+    #measure-readout {
+        position: absolute; pointer-events: none; padding: 2px 7px; border-radius: 4px; white-space: nowrap;
+        background: color-mix(in srgb, var(--vscode-editorWidget-background, var(--panel)) 88%, transparent);
+        color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, var(--text)));
+        border: 1px solid var(--vscode-editorWidget-border, var(--vscode-widget-border, var(--line)));
+        font-family: var(--vscode-font-family, system-ui, -apple-system, "Segoe UI", sans-serif); font-size: 12px;
+        font-variant-numeric: tabular-nums;
+    }
+    #measure-readout[hidden] { display: none; }
     #axis-indicator {
         position: absolute; right: 16px; bottom: 14px; width: 110px; height: 110px;
         pointer-events: none; filter: drop-shadow(0 0 2px black);
@@ -366,9 +473,12 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
 </div>
 <div id="stage">
     <div id="viewer"></div>
+    <div id="sections" hidden></div>
     <div id="info" hidden></div>
+    <div id="measure-readout" hidden></div>
     <button id="parts-button" type="button" aria-haspopup="menu" hidden></button>
     <div id="overlay">Loading…</div>
+    <div id="section-bar" hidden></div>
     <div id="status" role="status"></div>
 </div>
 <script nonce="${nonce}" src="${webview.asWebviewUri(script)}"></script>

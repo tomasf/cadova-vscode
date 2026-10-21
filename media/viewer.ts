@@ -13,11 +13,18 @@ import { PopupMenu, type MenuEntry, type MenuItem } from "./PopupMenu";
 import { PartHighlight } from "./PartHighlight";
 import { InfoPanel } from "./InfoPanel";
 import { PartThumbnails } from "./PartThumbnails";
+import { PartSolid } from "./PartSolid";
+import { CrossSectionEditor } from "./CrossSectionEditor";
+import type { CrossSection } from "./CrossSection";
+import { SurfacePicker } from "./SurfacePicker";
+import { MeasurementTool, type Measurement } from "./MeasurementTool";
 
 /** What a preview remembers of its own: its view options, and the parts hidden in it, by ID. */
 interface PanelState {
     options?: ViewOptions;
     hiddenParts?: string[];
+    measurements?: Measurement[];
+    sections?: CrossSection[];
 }
 
 declare function acquireVsCodeApi(): {
@@ -42,6 +49,9 @@ interface ViewerEvents {
     partsChanged(parts: PartSummary[], hiddenParts: Set<string>, newModel: boolean): void;
     /** Pictures of parts as they're drawn, by part ID. */
     thumbnailsRendered(urls: Record<string, string>): void;
+    /** The measurements, with the point under the pointer while measuring. */
+    measurementsChanged(measurements: Measurement[]): void;
+    sectionsChanged(sections: CrossSection[]): void;
 }
 
 type HostMessage =
@@ -52,7 +62,10 @@ type HostMessage =
     | { type: "status"; status: Status }
     | { type: "hiddenParts"; hidden: string[] }
     | { type: "highlightPart"; id: string | null }
-    | { type: "frameParts"; ids: string[] };
+    | { type: "frameParts"; ids: string[] }
+    | { type: "highlightMeasurement"; id: string | null }
+    | { type: "deleteMeasurement"; id: string }
+    | { type: "deleteAllMeasurements" };
 
 type Status = "building" | "generating" | "loading" | "failed" | "idle";
 
@@ -121,9 +134,13 @@ class ModelViewer {
     private readonly axisIndicator: AxisIndicator;
     private readonly highlight: PartHighlight;
     private readonly thumbnails: PartThumbnails;
+    private readonly sections: CrossSectionEditor;
+    readonly measurements: MeasurementTool;
     readonly toolbar: Toolbar;
+    private modelBox = new THREE.Box3();
 
     private current: THREE.Object3D | null = null;
+    private readonly picker: SurfacePicker;
     private edges: EdgeOverlay | null = null;
     private framed = false;
     private hasModel = false;
@@ -132,8 +149,11 @@ class ModelViewer {
         private options: ViewOptions,
         private hiddenParts: Set<string>,
         private readonly events: ViewerEvents,
+        saved: { measurements: Measurement[]; sections: CrossSection[] },
     ) {
         this.renderer.setPixelRatio(window.devicePixelRatio);
+        // Cross-sections clip the model's materials, and only those
+        this.renderer.localClippingEnabled = true;
         this.viewportRenderer = new ViewportRenderer(this.renderer);
         this.highlight = new PartHighlight(this.renderer);
         this.thumbnails = new PartThumbnails(this.renderer);
@@ -163,6 +183,30 @@ class ModelViewer {
         this.scene.add(this.origin);
         this.axisIndicator = new AxisIndicator(this.container);
 
+        const canvas = this.renderer.domElement;
+        const viewer = this;
+        this.sections = new CrossSectionEditor({
+            get camera() { return viewer.rig.camera; },
+            canvas,
+            get modelBox() { return viewer.modelBox; },
+            get hiddenParts() { return viewer.hiddenParts; },
+            worldPerPixel: (point) => this.worldPerPixel(point),
+            sectionsChanged: (sections) => events.sectionsChanged(sections),
+        }, saved.sections);
+        const picker = new SurfacePicker({
+            get camera() { return viewer.rig.camera; },
+            canvas,
+            get model() { return viewer.current; },
+            caps: this.sections.view.capObjects,
+            get sections() { return viewer.sections.enabled; },
+        });
+        this.measurements = new MeasurementTool(canvas, picker, {
+            measurementsChanged: (measurements) => events.measurementsChanged(measurements),
+            activeChanged: () => this.toolbar.refresh(),
+        }, saved.measurements);
+        this.scene.add(this.sections.view.group, this.measurements.group, this.sections.gizmo.root);
+        this.picker = picker;
+
         // VS Code changes its theme by changing the body's classes
         new MutationObserver(() => this.updateColors()).observe(document.body, {
             attributes: true, attributeFilter: ["class"],
@@ -182,6 +226,8 @@ class ModelViewer {
                 const rect = button.getBoundingClientRect();
                 PopupMenu.show(this.showMenuEntries(), rect.left, rect.bottom + 4);
             },
+            get measuring() { return viewer.measurements.isActive; },
+            setMeasuring: (on) => this.measurements.setActive(on),
         });
         this.listenForContextMenu();
         this.renderer.domElement.addEventListener("pointerdown", () => this.highlightPart(null));
@@ -197,6 +243,8 @@ class ModelViewer {
             camera.updateMatrixWorld();
             this.grid.updateScale(camera, this.container.clientWidth, this.container.clientHeight);
             this.axisIndicator.update(camera);
+            this.sections.render(time);
+            this.measurements.render((point) => this.worldPerPixel(point));
             this.viewportRenderer.render(this.scene, camera);
             this.highlight.render(camera);
         });
@@ -213,8 +261,10 @@ class ModelViewer {
             this.showMessage(`Couldn't read ${name}: ${(error as Error).message}`);
             return;
         }
-        // The edges and the counts need the meshes as read, before smoothing unshares their vertices
+        // The edges, the counts and the cross-sections' cut faces need the meshes as read, before
+        // smoothing unshares their vertices
         const edges = new EdgeOverlay(object);
+        const solids = object.children.map((part) => ({ id: ModelViewer.partID(part), part, solid: new PartSolid(part) }));
         this.info.show({
             name: name.replace(/\.3mf$/i, ""), fileSize: buffer.byteLength,
             stats: InfoPanel.measure(object), metadata: object.userData.metadata ?? [],
@@ -237,11 +287,15 @@ class ModelViewer {
         this.current = object;
         this.edges = edges;
         this.scene.add(object);
+        this.sections.view.setModel(object, solids);
         this.showParts();
         this.reportParts(true);
         this.thumbnails.render(this.parts.map((part) => ({ id: ModelViewer.partID(part), part })));
 
         const box = new THREE.Box3().setFromObject(object);
+        this.modelBox = box;
+        this.picker.modelChanged();
+        this.sections.refresh();
         this.controls.setModel(object, box);
         this.rig.setModelBox(box);
         this.grid.updateBounds(box);
@@ -336,6 +390,8 @@ class ModelViewer {
 
     private showParts() {
         for (const part of this.parts) part.visible = !this.hiddenParts.has(ModelViewer.partID(part));
+        // Hidden parts have no cut faces
+        this.sections.refresh();
     }
 
     // The one part shown, if only one is
@@ -454,6 +510,10 @@ class ModelViewer {
         });
     }
 
+    private worldPerPixel(point: THREE.Vector3): number {
+        return this.rig.worldPerPixel(point, this.container.clientHeight);
+    }
+
     private viewCenter(): THREE.Vector2 {
         const rect = this.renderer.domElement.getBoundingClientRect();
         return new THREE.Vector2(rect.left + rect.width / 2, rect.top + rect.height / 2);
@@ -498,6 +558,9 @@ const state: PanelState = vscode.getState() ?? {};
 const ownOptions = state.options;
 let viewer: ModelViewer | null = null;
 try {
+    // The list in the sidebar follows the point under the pointer, but needn't on every move
+    let measurementsTimer: ReturnType<typeof setTimeout> | undefined;
+    let pendingMeasurements: Measurement[] = [];
     viewer = new ModelViewer({ ...defaultOptions, ...ownOptions }, new Set(state.hiddenParts), {
         optionsChanged(options) {
             state.options = options;
@@ -512,7 +575,25 @@ try {
         thumbnailsRendered(urls) {
             vscode.postMessage({ type: "thumbnails", thumbnails: urls });
         },
-    });
+        measurementsChanged(measurements) {
+            const complete = measurements.filter((measurement) => measurement.phase === "complete");
+            if (JSON.stringify(complete) !== JSON.stringify(state.measurements ?? [])) {
+                state.measurements = complete;
+                vscode.setState(state);
+            }
+            pendingMeasurements = measurements;
+            measurementsTimer ??= setTimeout(() => {
+                measurementsTimer = undefined;
+                vscode.postMessage({ type: "measurements", measurements: pendingMeasurements });
+            }, 80);
+        },
+        sectionsChanged(sections) {
+            state.sections = sections;
+            vscode.setState(state);
+        },
+    }, { measurements: state.measurements ?? [], sections: state.sections ?? [] });
+    // Measurements from before, for the list
+    vscode.postMessage({ type: "measurements", measurements: state.measurements ?? [] });
 } catch (error) {
     const overlay = document.getElementById("overlay")!;
     overlay.textContent = `The 3D preview isn't available: ${(error as Error).message}`;
@@ -545,6 +626,15 @@ window.addEventListener("message", ({ data }: MessageEvent<HostMessage>) => {
             break;
         case "frameParts":
             viewer?.frameParts(data.ids);
+            break;
+        case "highlightMeasurement":
+            viewer?.measurements.highlight(data.id);
+            break;
+        case "deleteMeasurement":
+            viewer?.measurements.delete(data.id);
+            break;
+        case "deleteAllMeasurements":
+            viewer?.measurements.deleteAll();
             break;
         case "status":
             status.set(data.status);

@@ -128,6 +128,17 @@ export class CameraRig {
         };
     }
 
+    /** How much of the world a pixel spans at a point, for drawing things a constant size on screen. */
+    worldPerPixel(point: THREE.Vector3, viewHeight: number): number {
+        const height = Math.max(viewHeight, 1);
+        if (this.current === this.orthographic) {
+            return (this.orthographic.top - this.orthographic.bottom) / this.orthographic.zoom / height;
+        }
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.perspective.quaternion);
+        const depth = Math.abs(point.clone().sub(this.perspective.position).dot(forward));
+        return 2 * depth * tanHalfFieldOfView / height;
+    }
+
     /** Stops a flight where it is, such as when the view is grabbed. */
     cancelFlight() {
         this.flight = null;

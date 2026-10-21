@@ -92,6 +92,21 @@
         "command": "cadova.partsLargeIcons",
         "title": "Use Large Icons",
         "category": "Cadova"
+      },
+      {
+        "command": "cadova.copyMeasurement",
+        "title": "Copy",
+        "category": "Cadova"
+      },
+      {
+        "command": "cadova.deleteMeasurement",
+        "title": "Delete",
+        "category": "Cadova"
+      },
+      {
+        "command": "cadova.deleteAllMeasurements",
+        "title": "Delete All Measurements",
+        "category": "Cadova"
       }
     ],
     "menus": {
@@ -139,6 +154,18 @@
         {
           "command": "cadova.partsLargeIcons",
           "when": "false"
+        },
+        {
+          "command": "cadova.copyMeasurement",
+          "when": "false"
+        },
+        {
+          "command": "cadova.deleteMeasurement",
+          "when": "false"
+        },
+        {
+          "command": "cadova.deleteAllMeasurements",
+          "when": "cadova.hasPreview"
         }
       ],
       "editor/title": [
@@ -190,6 +217,21 @@
           "command": "cadova.copyPartNames",
           "when": "webviewId == cadova.parts && webviewSection == part",
           "group": "2_copy@1"
+        },
+        {
+          "command": "cadova.copyMeasurement",
+          "when": "webviewId == cadova.parts && (webviewSection == measurement || webviewSection == coordinate)",
+          "group": "1_edit@1"
+        },
+        {
+          "command": "cadova.deleteMeasurement",
+          "when": "webviewId == cadova.parts && webviewSection == measurement",
+          "group": "1_edit@2"
+        },
+        {
+          "command": "cadova.deleteAllMeasurements",
+          "when": "webviewId == cadova.parts && (webviewSection == measurement || webviewSection == coordinate)",
+          "group": "2_all@1"
         }
       ]
     },
@@ -235,7 +277,7 @@
         {
           "type": "webview",
           "id": "cadova.parts",
-          "name": "Model Parts",
+          "name": "Model",
           "when": "cadova.hasPreview"
         }
       ]
@@ -255,6 +297,7 @@
     "@types/vscode": "~1.80.0",
     "esbuild": "^0.24.0",
     "three": "^0.170.0",
+    "three-mesh-bvh": "^0.8.3",
     "typescript": "^5.6.3"
   }
 }

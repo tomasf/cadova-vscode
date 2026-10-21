@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import * as path from "node:path";
 import { randomBytes } from "node:crypto";
-import type { PreviewEditorProvider } from "./PreviewEditorProvider";
+import type { Measurement, PreviewEditorProvider } from "./PreviewEditorProvider";
 
 type IconSize = "small" | "large";
 
@@ -10,10 +10,15 @@ interface RowContext {
     partId: string;
 }
 
+/** What a measurement's right-click menu knows about it. */
+interface MeasurementContext {
+    measurementId: string;
+}
+
 /**
- * The Model Parts view in the sidebar, after Cadova Viewer's parts list: the parts of the model in
- * the active preview, each with its thumbnail and a checkmark that shows or hides it. Hovering a part
- * outlines it in the preview; double-clicking one centers the view on it.
+ * The Model view in the sidebar, after Cadova Viewer's: the parts of the model in the active preview,
+ * each with its thumbnail and a checkmark that shows or hides it, and its measurements. Hovering a
+ * part outlines it in the preview; double-clicking one centers the view on it.
  *
  * The list itself is a webview (media/parts.ts), since a tree view can't show the thumbnails or tell
  * when a row is hovered. Its right-click menu is VS Code's own, with the commands registered here.
@@ -35,6 +40,13 @@ export class PartsView implements vscode.WebviewViewProvider, vscode.Disposable 
             vscode.window.registerWebviewViewProvider(PartsView.viewID, this),
             preview.onDidChangeActiveParts(() => this.update()),
             preview.onDidRenderActiveThumbnails((thumbnails) => this.view?.webview.postMessage({ type: "thumbnails", thumbnails })),
+            preview.onDidChangeActiveMeasurements(() => this.view?.webview.postMessage({ type: "measurements", measurements: preview.activeMeasurements })),
+            vscode.commands.registerCommand("cadova.copyMeasurement", (row: MeasurementContext) => {
+                const measurement = preview.activeMeasurements.find((measurement) => measurement.id === row.measurementId);
+                if (measurement) vscode.env.clipboard.writeText(PartsView.measurementText(measurement));
+            }),
+            vscode.commands.registerCommand("cadova.deleteMeasurement", (row: MeasurementContext) => preview.deleteMeasurement(row.measurementId)),
+            vscode.commands.registerCommand("cadova.deleteAllMeasurements", () => preview.deleteAllMeasurements()),
             vscode.commands.registerCommand("cadova.centerOnParts", (row: RowContext) => preview.frameParts(this.targets(row))),
             vscode.commands.registerCommand("cadova.showOnlyParts", (row: RowContext) => this.showOnly(this.targets(row))),
             vscode.commands.registerCommand("cadova.copyPartNames", (row: RowContext) => {
@@ -72,6 +84,13 @@ export class PartsView implements vscode.WebviewViewProvider, vscode.Disposable 
                     break;
                 case "selection":
                     this.selection = message.ids;
+                    break;
+                case "hoverMeasurement":
+                    this.preview.highlightMeasurement(message.id);
+                    break;
+                case "deleteMeasurement":
+                    if (message.all) this.preview.deleteAllMeasurements();
+                    else this.preview.deleteMeasurement(message.id);
                     break;
             }
         });
@@ -122,6 +141,20 @@ export class PartsView implements vscode.WebviewViewProvider, vscode.Disposable 
             type: "state", file: active?.file.toString(), parts: active?.parts ?? [], hidden,
             iconSize: this.iconSize, thumbnails: active?.thumbnails ?? {},
         });
+        this.view.webview.postMessage({ type: "measurements", measurements: this.preview.activeMeasurements });
+    }
+
+    // Cadova Viewer's copied text: each point's coordinates, the difference and the length, in mm
+    private static measurementText(measurement: Measurement): string {
+        const value = (number: number) => `${number.toFixed(2)} mm`;
+        const point = (title: string, [x, y, z]: number[]) => `${title}\nX: ${value(x)}\nY: ${value(y)}\nZ: ${value(z)}`;
+        const sections = [point("Point A", measurement.start)];
+        const end = measurement.end;
+        if (end) {
+            const delta = end.map((coordinate, axis) => coordinate - measurement.start[axis]);
+            sections.push(point("Point B", end), point("Delta", delta), `Length: ${value(Math.hypot(...delta))}`);
+        }
+        return sections.join("\n\n");
     }
 
     private html(webview: vscode.Webview, script: vscode.Uri): string {
@@ -137,7 +170,8 @@ export class PartsView implements vscode.WebviewViewProvider, vscode.Disposable 
     /* Rows like a VS Code list, with Cadova Viewer's thumbnail, name and checkmark */
     html, body { height: 100%; margin: 0; padding: 0; }
     body { color: var(--vscode-foreground); font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); }
-    #list { outline: none; padding: 2px 0; min-height: 100%; box-sizing: border-box; user-select: none; }
+    #list { outline: none; padding: 2px 0; box-sizing: border-box; user-select: none; }
+    [hidden] { display: none !important; }
     .row {
         display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; height: var(--row-height);
         cursor: default; border: 1px solid transparent;
@@ -161,10 +195,37 @@ export class PartsView implements vscode.WebviewViewProvider, vscode.Disposable 
     .check svg { width: 16px; height: 16px; }
     .row:not(.hidden) .check { color: var(--vscode-button-background, var(--vscode-focusBorder)); }
     .empty { padding: 8px 12px; color: var(--vscode-descriptionForeground); }
+    /* Sections, like Cadova Viewer's sidebar: parts, then measurements */
+    .heading {
+        padding: 10px 12px 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+        color: var(--vscode-descriptionForeground);
+    }
+    #measurements { padding: 0 8px 8px; display: flex; flex-direction: column; gap: 6px; }
+    #measurements[hidden] { display: none; }
+    .measurement {
+        position: relative; padding: 8px 10px; border-radius: 8px; border: 2px solid var(--measurement);
+        background: var(--vscode-editorWidget-background, rgba(128, 128, 128, .1));
+        font-variant-numeric: tabular-nums; display: grid; grid-template-columns: 16px repeat(3, 1fr); gap: 4px 2px;
+        align-items: center; text-align: center;
+    }
+    .measurement .label { color: var(--vscode-descriptionForeground); text-align: left; font-weight: 600; }
+    .measurement .axis { color: var(--vscode-descriptionForeground); font-size: 10.5px; }
+    .measurement .value { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: text; }
+    .measurement .rule { grid-column: 1 / -1; height: 1px; background: var(--vscode-widget-border, rgba(128, 128, 128, .3)); margin: 2px 0; }
+    .measurement .length { grid-column: 1 / -1; }
+    .measurement .length span:first-child { color: var(--vscode-descriptionForeground); margin-right: 6px; }
+    .measurement .delete {
+        position: absolute; top: 2px; right: 2px; width: 22px; height: 22px; padding: 0; border: none; background: none;
+        color: var(--vscode-descriptionForeground); cursor: pointer; display: grid; place-items: center; border-radius: 4px;
+    }
+    .measurement .delete:hover { color: var(--vscode-foreground); background: var(--vscode-toolbar-hoverBackground); }
 </style>
 </head>
 <body class="${this.iconSize}">
+<div class="heading" id="parts-heading">Parts</div>
 <div id="list" tabindex="0" role="listbox" aria-multiselectable="true" aria-label="Parts"></div>
+<div class="heading" id="measurements-heading" hidden>Measurements</div>
+<div id="measurements" hidden></div>
 <script nonce="${nonce}" src="${webview.asWebviewUri(script)}"></script>
 </body>
 </html>`;

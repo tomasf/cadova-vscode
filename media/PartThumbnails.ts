@@ -103,10 +103,14 @@ export class PartThumbnails {
         const renderer = this.renderer;
         const clearColor = renderer.getClearColor(new THREE.Color());
         const clearAlpha = renderer.getClearAlpha();
+        // The whole part, whatever cross-sections cut the view
+        const clipping = renderer.localClippingEnabled;
+        renderer.localClippingEnabled = false;
         renderer.setClearColor(0x000000, 0);
         renderer.setRenderTarget(this.target);
         renderer.clear();
         renderer.render(this.scene, this.camera);
+        renderer.localClippingEnabled = clipping;
         renderer.readRenderTargetPixels(this.target, 0, 0, size, size, this.pixels);
         renderer.setRenderTarget(null);
         renderer.setClearColor(clearColor, clearAlpha);
