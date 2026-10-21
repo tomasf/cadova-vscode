@@ -31,8 +31,10 @@ export class CrossSectionView {
     private parts: { id: string; part: THREE.Object3D; solid: PartSolid; color: THREE.Color }[] = [];
     private readonly caps = new Map<string, THREE.Mesh<THREE.BufferGeometry, HatchMaterial>>();
     private readonly capGroup = new THREE.Group();
+    // Cadova Viewer's plane is a 5% fill with a hatch at 0.32, but SceneKit draws it far fainter than
+    // that, about as if its alpha counted twice, so these are what it looks like rather than its numbers
     private readonly locator = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new HatchMaterial({
-        color: 0xe6e6e6, transparent: true, opacity: 0.05, depthWrite: false,
+        color: 0xe6e6e6, transparent: true, opacity: 0.0025, depthWrite: false,
     }));
     private ghost: THREE.Object3D | null = null;
     private readonly ghostPlanes: THREE.Plane[] = [];
@@ -42,7 +44,7 @@ export class CrossSectionView {
 
     constructor() {
         this.capGroup.name = "cross-section caps";
-        this.locator.material.hatch.hatchAlpha.value = 0.32;
+        this.locator.material.hatch.hatchAlpha.value = 0.055;
         this.locator.material.hatch.hatchStrength.value = 0.32;
         this.locator.renderOrder = 5;
         this.locator.visible = false;
