@@ -104,14 +104,26 @@ export class CameraRig {
     /** Shows the model from a standard direction, flying there or jumping. */
     show(preset: ViewPreset, animated: boolean) {
         if (this.box.isEmpty()) return;
-        const target = this.pose(preset);
+        const { axis, up } = CameraRig.presets[preset];
+        this.fly(this.pose(this.box, axis, up), this.box, animated);
+    }
+
+    /** Flies to frame a box, such as some of the model's parts, from the direction the view has now. */
+    frame(box: THREE.Box3) {
+        if (box.isEmpty()) return;
+        const axis = new THREE.Vector3(0, 0, 1).applyQuaternion(this.current.quaternion);
+        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.current.quaternion);
+        this.fly(this.pose(box, axis, up), box, true);
+    }
+
+    private fly(target: Pose, around: THREE.Box3, animated: boolean) {
         if (!animated) {
             this.flight = null;
             this.apply(target);
             return;
         }
         this.flight = {
-            from: this.currentPose(), to: target, pivot: this.box.getCenter(new THREE.Vector3()),
+            from: this.currentPose(), to: target, pivot: around.getCenter(new THREE.Vector3()),
             start: null, duration: 500,
         };
     }
@@ -160,19 +172,18 @@ export class CameraRig {
     }
 
     /**
-     * Frames the model from a preset's direction, the way Cadova Viewer's `frameBoundingBox` does: the
-     * box's corners, projected onto the view, fit with 50% headroom.
+     * Frames a box looking along an axis, the way Cadova Viewer's `frameBoundingBox` does: the box's
+     * corners, projected onto the view, fit with 50% headroom.
      */
-    private pose(preset: ViewPreset): Pose {
-        const { axis, up: presetUp } = CameraRig.presets[preset];
+    private pose(box: THREE.Box3, axis: THREE.Vector3, viewUp: THREE.Vector3): Pose {
         const margin = 1.5;
-        const center = this.box.getCenter(new THREE.Vector3());
-        const right = new THREE.Vector3().crossVectors(presetUp, axis).normalize();
+        const center = box.getCenter(new THREE.Vector3());
+        const right = new THREE.Vector3().crossVectors(viewUp, axis).normalize();
         const up = new THREE.Vector3().crossVectors(axis, right).normalize();
         const quaternion = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, axis));
 
         let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity, perspectiveDistance = 0;
-        const { min, max } = this.box;
+        const { min, max } = box;
         for (const x of [min.x, max.x]) for (const y of [min.y, max.y]) for (const z of [min.z, max.z]) {
             const offset = new THREE.Vector3(x, y, z).sub(center);
             const u = offset.dot(right), v = offset.dot(up);
@@ -186,7 +197,7 @@ export class CameraRig {
 
         let width = maxU - minU, height = maxV - minV;
         if (!(width > 0) || !(height > 0)) {
-            const size = this.box.getSize(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
             width = height = Math.max(size.x, size.y, size.z) || 1;
         }
         const halfHeight = Math.max(width / 2 / this.aspect, height / 2) * margin || 1;

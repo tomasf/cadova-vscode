@@ -57,16 +57,6 @@
         "icon": "$(screen-full)"
       },
       {
-        "command": "cadova.highlightPart",
-        "title": "Highlight Part",
-        "category": "Cadova"
-      },
-      {
-        "command": "cadova.showOnlyPart",
-        "title": "Show Only This Part",
-        "category": "Cadova"
-      },
-      {
         "command": "cadova.showAllParts",
         "title": "Show All Parts",
         "category": "Cadova",
@@ -77,6 +67,31 @@
         "title": "Hide All Parts",
         "category": "Cadova",
         "icon": "$(eye-closed)"
+      },
+      {
+        "command": "cadova.centerOnParts",
+        "title": "Center View",
+        "category": "Cadova"
+      },
+      {
+        "command": "cadova.showOnlyParts",
+        "title": "Show Only",
+        "category": "Cadova"
+      },
+      {
+        "command": "cadova.copyPartNames",
+        "title": "Copy Part Names",
+        "category": "Cadova"
+      },
+      {
+        "command": "cadova.partsSmallIcons",
+        "title": "Use Small Icons",
+        "category": "Cadova"
+      },
+      {
+        "command": "cadova.partsLargeIcons",
+        "title": "Use Large Icons",
+        "category": "Cadova"
       }
     ],
     "menus": {
@@ -98,20 +113,32 @@
           "when": "activeCustomEditorId == cadova.preview"
         },
         {
-          "command": "cadova.highlightPart",
-          "when": "false"
-        },
-        {
-          "command": "cadova.showOnlyPart",
-          "when": "false"
-        },
-        {
           "command": "cadova.showAllParts",
           "when": "cadova.hasPreview"
         },
         {
           "command": "cadova.hideAllParts",
           "when": "cadova.hasPreview"
+        },
+        {
+          "command": "cadova.centerOnParts",
+          "when": "false"
+        },
+        {
+          "command": "cadova.showOnlyParts",
+          "when": "false"
+        },
+        {
+          "command": "cadova.copyPartNames",
+          "when": "false"
+        },
+        {
+          "command": "cadova.partsSmallIcons",
+          "when": "false"
+        },
+        {
+          "command": "cadova.partsLargeIcons",
+          "when": "false"
         }
       ],
       "editor/title": [
@@ -136,12 +163,33 @@
           "command": "cadova.hideAllParts",
           "when": "view == cadova.parts && !cadova.hasHiddenParts",
           "group": "navigation"
+        },
+        {
+          "command": "cadova.partsSmallIcons",
+          "when": "view == cadova.parts && cadova.partsIconSize != small",
+          "group": "1_size@1"
+        },
+        {
+          "command": "cadova.partsLargeIcons",
+          "when": "view == cadova.parts && cadova.partsIconSize == small",
+          "group": "1_size@2"
         }
       ],
-      "view/item/context": [
+      "webview/context": [
         {
-          "command": "cadova.showOnlyPart",
-          "when": "view == cadova.parts && viewItem == part"
+          "command": "cadova.centerOnParts",
+          "when": "webviewId == cadova.parts && webviewSection == part",
+          "group": "1_view@1"
+        },
+        {
+          "command": "cadova.showOnlyParts",
+          "when": "webviewId == cadova.parts && webviewSection == part",
+          "group": "1_view@2"
+        },
+        {
+          "command": "cadova.copyPartNames",
+          "when": "webviewId == cadova.parts && webviewSection == part",
+          "group": "2_copy@1"
         }
       ]
     },
@@ -185,6 +233,7 @@
     "views": {
       "explorer": [
         {
+          "type": "webview",
           "id": "cadova.parts",
           "name": "Model Parts",
           "when": "cadova.hasPreview"

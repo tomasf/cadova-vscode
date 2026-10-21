@@ -28,6 +28,14 @@ const contexts = await Promise.all([
         platform: "browser",
         format: "iife",
     }),
+    // The parts list in the sidebar, also in a webview
+    esbuild.context({
+        ...shared,
+        entryPoints: ["media/parts.ts"],
+        outfile: "dist/parts.js",
+        platform: "browser",
+        format: "iife",
+    }),
 ]);
 
 if (watch) {

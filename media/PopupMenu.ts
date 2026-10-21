@@ -1,6 +1,8 @@
 /** A choice in a menu. Holding Option (Alt) swaps in its alternate, as macOS menus do. */
 export interface MenuItem {
     label: string;
+    /** A picture before the label, such as a part's thumbnail, as an image URL; empty keeps its place. */
+    icon?: string;
     checked?: boolean;
     action?: () => void;
     submenu?: MenuEntry[];
@@ -119,7 +121,7 @@ export class PopupMenu {
             row.append(
                 PopupMenu.span("check normal", entry.checked ? "✓" : ""),
                 PopupMenu.span("check alternate", (entry.alternate ? entry.alternate.checked : entry.checked) ? "✓" : ""),
-                PopupMenu.span("label", entry.label),
+                PopupMenu.label(entry),
                 PopupMenu.span("arrow", entry.submenu ? "›" : ""),
             );
             row.addEventListener("pointerenter", () => {
@@ -154,6 +156,13 @@ export class PopupMenu {
         list.style.left = `${Math.max(4, x)}px`;
         list.style.top = `${Math.max(4, Math.min(y, window.innerHeight - height - 4))}px`;
         return list;
+    }
+
+    private static label(item: MenuItem): HTMLSpanElement {
+        const label = PopupMenu.span("label", item.label);
+        if (item.icon) label.prepend(Object.assign(document.createElement("img"), { className: "icon", src: item.icon, alt: "" }));
+        else if (item.icon === "") label.prepend(PopupMenu.span("icon", ""));
+        return label;
     }
 
     private static span(className: string, text: string): HTMLSpanElement {

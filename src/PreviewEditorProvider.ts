@@ -16,11 +16,12 @@ export interface ModelPart {
     semantic: string;
 }
 
-/** The parts of the model in a preview, and which of them it hides. */
+/** The parts of the model in a preview, which of them it hides, and the pictures of them drawn so far. */
 export interface PreviewParts {
     file: vscode.Uri;
     parts: ModelPart[];
     hidden: string[];
+    thumbnails: Record<string, string>;
 }
 
 /** Shows 3MF files in a 3D preview that reloads whenever the file changes on disk. */
@@ -35,6 +36,9 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
     private readonly activePartsChange = new vscode.EventEmitter<void>();
     /** Fires when the active preview changes, or the parts in it, or which of them are hidden. */
     readonly onDidChangeActiveParts = this.activePartsChange.event;
+    private readonly activeThumbnailsChange = new vscode.EventEmitter<Record<string, string>>();
+    /** Fires with new pictures of the active preview's parts, by part ID, as they're drawn. */
+    readonly onDidRenderActiveThumbnails = this.activeThumbnailsChange.event;
 
     private static readonly optionsKey = "cadova.previewOptions";
 
@@ -78,6 +82,11 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
     /** Outlines a part in the active preview, or none. */
     highlightPart(id: string | null) {
         this.activePanel?.webview.postMessage({ type: "highlightPart", id });
+    }
+
+    /** Centers the active preview's view on some parts. */
+    frameParts(ids: string[]) {
+        this.activePanel?.webview.postMessage({ type: "frameParts", ids });
     }
 
     fitActive() {
@@ -149,8 +158,15 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
                 }
                 if (message.type === "options") this.state.update(PreviewEditorProvider.optionsKey, message.options);
                 if (message.type === "parts") {
-                    this.partsByPanel.set(panel, { file: document.uri, parts: message.parts, hidden: message.hidden });
+                    // A new model's parts get new pictures; the old ones stay while only visibility changes
+                    const thumbnails = message.newModel ? {} : this.partsByPanel.get(panel)?.thumbnails ?? {};
+                    this.partsByPanel.set(panel, { file: document.uri, parts: message.parts, hidden: message.hidden, thumbnails });
                     if (panel === this.activePanel) this.activePartsChange.fire();
+                }
+                if (message.type === "thumbnails") {
+                    const parts = this.partsByPanel.get(panel);
+                    if (parts) Object.assign(parts.thumbnails, message.thumbnails);
+                    if (panel === this.activePanel) this.activeThumbnailsChange.fire(message.thumbnails);
                 }
             }),
             panel.onDidChangeViewState(() => {
@@ -335,6 +351,8 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
         color: var(--vscode-menu-selectionForeground, #ffffff);
     }
     .menu-item .check { text-align: center; }
+    .menu-item .label { display: flex; align-items: center; gap: 6px; }
+    .menu-item .icon { width: 24px; height: 24px; flex: none; }
     .menu-item .arrow { text-align: right; }
     .menu-header { padding: 4px 8px 2px; font-size: 11.5px; opacity: .65; }
     .menu-separator { height: 1px; margin: 4px 6px; background: var(--vscode-menu-separatorBackground, var(--line)); }

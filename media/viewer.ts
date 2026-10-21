@@ -12,6 +12,7 @@ import { Toolbar, type ViewOptions } from "./Toolbar";
 import { PopupMenu, type MenuEntry, type MenuItem } from "./PopupMenu";
 import { PartHighlight } from "./PartHighlight";
 import { InfoPanel } from "./InfoPanel";
+import { PartThumbnails } from "./PartThumbnails";
 
 /** What a preview remembers of its own: its view options, and the parts hidden in it, by ID. */
 interface PanelState {
@@ -34,6 +35,15 @@ interface PartSummary {
     semantic: string;
 }
 
+/** What the view tells the extension about. */
+interface ViewerEvents {
+    optionsChanged(options: ViewOptions): void;
+    /** The model's parts when a new model is shown, and later when which are hidden changes. */
+    partsChanged(parts: PartSummary[], hiddenParts: Set<string>, newModel: boolean): void;
+    /** Pictures of parts as they're drawn, by part ID. */
+    thumbnailsRendered(urls: Record<string, string>): void;
+}
+
 type HostMessage =
     | { type: "model"; name: string; data: ModelData }
     | { type: "error"; message: string }
@@ -41,7 +51,8 @@ type HostMessage =
     | { type: "options"; options: Partial<ViewOptions> }
     | { type: "status"; status: Status }
     | { type: "hiddenParts"; hidden: string[] }
-    | { type: "highlightPart"; id: string | null };
+    | { type: "highlightPart"; id: string | null }
+    | { type: "frameParts"; ids: string[] };
 
 type Status = "building" | "generating" | "loading" | "failed" | "idle";
 
@@ -109,6 +120,7 @@ class ModelViewer {
     private readonly origin = new OriginAxes();
     private readonly axisIndicator: AxisIndicator;
     private readonly highlight: PartHighlight;
+    private readonly thumbnails: PartThumbnails;
     readonly toolbar: Toolbar;
 
     private current: THREE.Object3D | null = null;
@@ -119,13 +131,13 @@ class ModelViewer {
     constructor(
         private options: ViewOptions,
         private hiddenParts: Set<string>,
-        onOptionsChange: (options: ViewOptions) => void,
-        /** Called with the model's parts when a model is shown, and when which are hidden changes. */
-        private readonly onPartsChange: (parts: PartSummary[], hiddenParts: Set<string>) => void,
+        private readonly events: ViewerEvents,
     ) {
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.viewportRenderer = new ViewportRenderer(this.renderer);
         this.highlight = new PartHighlight(this.renderer);
+        this.thumbnails = new PartThumbnails(this.renderer);
+        this.thumbnails.onRender = (urls) => events.thumbnailsRendered(urls);
         this.container.append(this.renderer.domElement);
 
         this.scene.background = new THREE.Color(this.cssValue("--viewer"));
@@ -164,7 +176,7 @@ class ModelViewer {
             showPreset: (preset) => this.showPreset(preset),
             setOptions: (next) => {
                 this.apply(next);
-                onOptionsChange(next);
+                events.optionsChanged(next);
             },
             showMenu: (button) => {
                 const rect = button.getBoundingClientRect();
@@ -226,7 +238,8 @@ class ModelViewer {
         this.edges = edges;
         this.scene.add(object);
         this.showParts();
-        this.reportParts();
+        this.reportParts(true);
+        this.thumbnails.render(this.parts.map((part) => ({ id: ModelViewer.partID(part), part })));
 
         const box = new THREE.Box3().setFromObject(object);
         this.controls.setModel(object, box);
@@ -296,18 +309,29 @@ class ModelViewer {
         this.reportParts();
     }
 
-    /** Outlines a part until the view is clicked, as the sidebar does for a part clicked there. */
+    /** Outlines a part, such as one hovered in the sidebar, or none. */
     highlightPart(id: string | null) {
         const part = this.parts.find((part) => ModelViewer.partID(part) === id) ?? null;
         this.highlight.show(part, id !== null && this.hiddenParts.has(id), this.options.edges);
     }
 
-    private reportParts() {
+    /** Centers the view on some parts, keeping the direction it looks from, as Cadova Viewer does. */
+    frameParts(ids: string[]) {
+        const box = new THREE.Box3();
+        for (const part of this.parts) {
+            if (ids.includes(ModelViewer.partID(part))) box.expandByObject(part);
+        }
+        if (box.isEmpty()) return;
+        this.controls.reset();
+        this.rig.frame(box);
+    }
+
+    private reportParts(newModel = false) {
         const ids = this.parts.map(ModelViewer.partID);
         this.partsButton.update(ids.length, ids.filter((id) => !this.hiddenParts.has(id)).length);
-        this.onPartsChange(this.parts.map((part) => ({
+        this.events.partsChanged(this.parts.map((part) => ({
             id: ModelViewer.partID(part), name: part.name, semantic: part.userData.semantic ?? "solid",
-        })), this.hiddenParts);
+        })), this.hiddenParts, newModel);
     }
 
     private showParts() {
@@ -327,6 +351,7 @@ class ModelViewer {
             const id = ModelViewer.partID(part);
             return {
                 label: part.name,
+                icon: this.thumbnails.url(id) ?? "",
                 checked: !this.hiddenParts.has(id),
                 action: () => {
                     const hidden = new Set(this.hiddenParts);
@@ -473,14 +498,20 @@ const state: PanelState = vscode.getState() ?? {};
 const ownOptions = state.options;
 let viewer: ModelViewer | null = null;
 try {
-    viewer = new ModelViewer({ ...defaultOptions, ...ownOptions }, new Set(state.hiddenParts), (options) => {
-        state.options = options;
-        vscode.setState(state);
-        vscode.postMessage({ type: "options", options });
-    }, (parts, hiddenParts) => {
-        state.hiddenParts = [...hiddenParts];
-        vscode.setState(state);
-        vscode.postMessage({ type: "parts", parts, hidden: state.hiddenParts });
+    viewer = new ModelViewer({ ...defaultOptions, ...ownOptions }, new Set(state.hiddenParts), {
+        optionsChanged(options) {
+            state.options = options;
+            vscode.setState(state);
+            vscode.postMessage({ type: "options", options });
+        },
+        partsChanged(parts, hiddenParts, newModel) {
+            state.hiddenParts = [...hiddenParts];
+            vscode.setState(state);
+            vscode.postMessage({ type: "parts", parts, hidden: state.hiddenParts, newModel });
+        },
+        thumbnailsRendered(urls) {
+            vscode.postMessage({ type: "thumbnails", thumbnails: urls });
+        },
     });
 } catch (error) {
     const overlay = document.getElementById("overlay")!;
@@ -511,6 +542,9 @@ window.addEventListener("message", ({ data }: MessageEvent<HostMessage>) => {
             break;
         case "highlightPart":
             viewer?.highlightPart(data.id);
+            break;
+        case "frameParts":
+            viewer?.frameParts(data.ids);
             break;
         case "status":
             status.set(data.status);

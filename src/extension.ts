@@ -21,7 +21,7 @@ export function activate(context: vscode.ExtensionContext) {
         output,
         builder,
         previewBuilds,
-        new PartsView(preview),
+        new PartsView(context.extensionUri, context.globalState, preview),
         manifestWatcher,
         manifestWatcher.onDidChange(forgetManifest),
         manifestWatcher.onDidCreate(forgetManifest),
