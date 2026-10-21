@@ -145,6 +145,14 @@ class ModelViewer {
     private framed = false;
     private hasModel = false;
 
+    // The view is drawn only when the camera moves, or for a while after anything else that could
+    // change it, which outlasts the cross-section ghost's fade. Without a GPU, as in a virtual
+    // machine, drawing every frame keeps the processor busy even when nothing changes.
+    private static readonly redrawGrace = 1000;
+    private redrawUntil = 0;
+    private readonly drawnView = new THREE.Matrix4();
+    private readonly drawnProjection = new THREE.Matrix4();
+
     constructor(
         private options: ViewOptions,
         private hiddenParts: Set<string>,
@@ -236,11 +244,22 @@ class ModelViewer {
         new ResizeObserver(() => this.resize()).observe(this.container);
         this.resize();
 
+        // Anything the pointer or keyboard does could change what's shown, in the view or a menu over it
+        for (const type of ["pointerdown", "pointermove", "pointerup", "wheel", "keydown", "keyup"]) {
+            window.addEventListener(type, () => this.invalidate(), { capture: true, passive: true });
+        }
+        document.addEventListener("visibilitychange", () => this.invalidate());
+
         this.renderer.setAnimationLoop((time) => {
             this.rig.update(time);
             this.controls.update(time);
             const camera = this.rig.camera;
             camera.updateMatrixWorld();
+            // Flights, glides and animated zooms all move the camera, so they draw as long as they last
+            const moved = !camera.matrixWorld.equals(this.drawnView) || !camera.projectionMatrix.equals(this.drawnProjection);
+            if (!moved && time > this.redrawUntil) return;
+            this.drawnView.copy(camera.matrixWorld);
+            this.drawnProjection.copy(camera.projectionMatrix);
             this.grid.updateScale(camera, this.container.clientWidth, this.container.clientHeight);
             this.axisIndicator.update(camera);
             this.sections.render(time);
@@ -313,6 +332,12 @@ class ModelViewer {
                 this.framed = true;
             }
         }
+        this.invalidate();
+    }
+
+    /** Draws the view over the next while, for a change that doesn't move the camera. */
+    invalidate() {
+        this.redrawUntil = performance.now() + ModelViewer.redrawGrace;
     }
 
     showMessage(text: string) {
@@ -343,6 +368,7 @@ class ModelViewer {
                 material.needsUpdate = true;
             }
         });
+        this.invalidate();
     }
 
     // Parts
@@ -522,6 +548,7 @@ class ModelViewer {
     private updateColors() {
         (this.grid.material as THREE.ShaderMaterial).uniforms.color.value.set(this.cssValue("--grid"));
         (this.scene.background as THREE.Color).set(this.cssValue("--viewer"));
+        this.invalidate();
     }
 
     private cssValue(name: string): string {
@@ -533,6 +560,8 @@ class ModelViewer {
         if (width === 0 || height === 0) return;
         this.viewportRenderer.setSize(width, height);
         this.rig.setAspect(width / height);
+        // Resizing clears the canvas
+        this.invalidate();
     }
 
     // Bytes can arrive as a typed array, an ArrayBuffer, or a serialized Node Buffer
@@ -600,6 +629,7 @@ try {
 }
 
 window.addEventListener("message", ({ data }: MessageEvent<HostMessage>) => {
+    viewer?.invalidate();
     switch (data.type) {
         case "model":
             // Reading a big model blocks the page, so the status gets to show before it starts
