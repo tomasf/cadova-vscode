@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { seeThroughRenderOrder } from "./customizer/meshes.js";
 
 export type EdgeVisibility = "none" | "sharp" | "all";
 
@@ -6,6 +7,7 @@ interface PartSource {
     owner: THREE.Mesh;
     position: THREE.BufferAttribute;
     pieces: { index: ArrayLike<number>; dark: boolean }[];
+    seeThrough: boolean;
 }
 
 /**
@@ -27,7 +29,8 @@ export class EdgeOverlay {
             if (child.name === "sharp-edges") this.sharp.push(child);
             if (!(child instanceof THREE.Mesh) || !child.geometry.index) return;
             const position = child.geometry.attributes.position as THREE.BufferAttribute;
-            const part: PartSource = byPosition.get(position) ?? { owner: child, position, pieces: [] };
+            const part: PartSource = byPosition.get(position) ?? { owner: child, position, pieces: [], seeThrough: false };
+            part.seeThrough ||= (child.material as THREE.Material).transparent;
             const color = (child.material as THREE.MeshStandardMaterial).color;
             part.pieces.push({
                 index: child.geometry.index.array.slice(),
@@ -94,7 +97,8 @@ export class EdgeOverlay {
         };
         const lines = new THREE.LineSegments(geometry, material);
         lines.name = "all-edges";
-        lines.renderOrder = 1;
+        // Like the sharp outlines, a see-through part's edges are drawn after its faces
+        lines.renderOrder = part.seeThrough ? seeThroughRenderOrder.edges : 1;
         part.owner.add(lines);
         return lines;
     }
