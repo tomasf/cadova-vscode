@@ -82,7 +82,8 @@ export class ModelBuilder implements vscode.Disposable {
             stream.setEncoding("utf8");
             stream.on("data", (chunk: string) => {
                 buffered += chunk;
-                const lines = buffered.split("\n");
+                // Windows builds end lines with \r\n, and a trailing \r would keep the patterns below from matching
+                const lines = buffered.split(/\r?\n/);
                 buffered = lines.pop() ?? "";
                 for (const line of lines) {
                     this.output.appendLine(line);
