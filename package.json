@@ -10,7 +10,7 @@
     "url": "https://github.com/tomasf/cadova-vscode"
   },
   "engines": {
-    "vscode": "^1.75.0"
+    "vscode": "^1.80.0"
   },
   "categories": [
     "Visualization",
@@ -55,6 +55,28 @@
         "title": "Fit Model in View",
         "category": "Cadova",
         "icon": "$(screen-full)"
+      },
+      {
+        "command": "cadova.highlightPart",
+        "title": "Highlight Part",
+        "category": "Cadova"
+      },
+      {
+        "command": "cadova.showOnlyPart",
+        "title": "Show Only This Part",
+        "category": "Cadova"
+      },
+      {
+        "command": "cadova.showAllParts",
+        "title": "Show All Parts",
+        "category": "Cadova",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "cadova.hideAllParts",
+        "title": "Hide All Parts",
+        "category": "Cadova",
+        "icon": "$(eye-closed)"
       }
     ],
     "menus": {
@@ -74,6 +96,22 @@
         {
           "command": "cadova.rebuildPreview",
           "when": "activeCustomEditorId == cadova.preview"
+        },
+        {
+          "command": "cadova.highlightPart",
+          "when": "false"
+        },
+        {
+          "command": "cadova.showOnlyPart",
+          "when": "false"
+        },
+        {
+          "command": "cadova.showAllParts",
+          "when": "cadova.hasPreview"
+        },
+        {
+          "command": "cadova.hideAllParts",
+          "when": "cadova.hasPreview"
         }
       ],
       "editor/title": [
@@ -86,6 +124,24 @@
           "command": "cadova.fitPreview",
           "when": "activeCustomEditorId == cadova.preview",
           "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "cadova.showAllParts",
+          "when": "view == cadova.parts && cadova.hasHiddenParts",
+          "group": "navigation"
+        },
+        {
+          "command": "cadova.hideAllParts",
+          "when": "view == cadova.parts && !cadova.hasHiddenParts",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "cadova.showOnlyPart",
+          "when": "view == cadova.parts && viewItem == part"
         }
       ]
     },
@@ -125,7 +181,16 @@
         "mac": "cmd+alt+r",
         "when": "activeCustomEditorId == cadova.preview"
       }
-    ]
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "cadova.parts",
+          "name": "Model Parts",
+          "when": "cadova.hasPreview"
+        }
+      ]
+    }
   },
   "scripts": {
     "build": "node esbuild.mjs",
@@ -138,7 +203,7 @@
   "devDependencies": {
     "@types/node": "^20.16.10",
     "@types/three": "^0.170.0",
-    "@types/vscode": "~1.75.0",
+    "@types/vscode": "~1.80.0",
     "esbuild": "^0.24.0",
     "three": "^0.170.0",
     "typescript": "^5.6.3"

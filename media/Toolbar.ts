@@ -6,12 +6,18 @@ export interface ViewOptions {
     projection: Projection;
     smoothShading: boolean;
     edges: EdgeVisibility;
+    showGrid: boolean;
+    showOrigin: boolean;
+    showAxisDirections: boolean;
+    showInfo: boolean;
 }
 
 export interface ToolbarActions {
     zoom(direction: 1 | -1): void;
     showPreset(preset: ViewPreset): void;
     setOptions(options: ViewOptions): void;
+    /** Opens the menu of what's shown, under a button. */
+    showMenu(button: HTMLElement): void;
 }
 
 // Cadova Viewer's short titles for the standard views. Icons for them are too alike to tell apart at
@@ -28,10 +34,12 @@ const icons = {
     smooth: `<circle cx="12" cy="12" r="8"/><path d="M8.5 9a4.5 4.5 0 0 1 3.5-2.5" />`,
     edgesNone: `<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" fill="currentColor" fill-opacity=".35" stroke="none"/>`,
     edgesSharp: `<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z M4 7.5l8 4.5 8-4.5 M12 12v9" fill="currentColor" fill-opacity=".2"/>`,
+    info: `<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><circle cx="12" cy="7.75" r=".6" fill="currentColor"/>`,
+    show: `<path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>`,
     edgesAll: `<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z M4 7.5l8 4.5 8-4.5 M12 12v9 M4 7.5l8 13.5 M12 3v9 M20 7.5l-8 13.5 M4 16.5l16-9 M20 16.5l-16-9" stroke-width="1.1" fill="currentColor" fill-opacity=".2"/>`,
 };
 
-/** The row of view controls over the model, after Cadova Viewer's toolbar and View menu. */
+/** The row of view controls above the model, after Cadova Viewer's toolbar and View menu. */
 export class Toolbar {
     private readonly element = document.getElementById("toolbar")!;
     private readonly updates: (() => void)[] = [];
@@ -62,6 +70,13 @@ export class Toolbar {
             this.choice("Sharp Edges", icons.edgesSharp, () => this.options.edges === "sharp", () => this.set({ edges: "sharp" })),
             this.choice("All Edges", icons.edgesAll, () => this.options.edges === "all", () => this.set({ edges: "all" })),
         ]);
+        // Things shown less often to change, such as the grid, are in a menu
+        const show = this.button("Show", icons.show, () => actions.showMenu(show));
+        show.setAttribute("aria-haspopup", "menu");
+        this.group([show]);
+        // Cadova Viewer's info sheet, as a panel that stays open
+        this.group([this.choice("Info", icons.info, () => this.options.showInfo,
+            () => this.set({ showInfo: !this.options.showInfo }))]);
         this.refresh();
     }
 
@@ -71,11 +86,7 @@ export class Toolbar {
         this.refresh();
     }
 
-    set hidden(hidden: boolean) {
-        this.element.hidden = hidden;
-    }
-
-    private set(change: Partial<ViewOptions>) {
+    set(change: Partial<ViewOptions>) {
         this.options = { ...this.options, ...change };
         this.refresh();
         this.actions.setOptions({ ...this.options });
@@ -85,12 +96,13 @@ export class Toolbar {
         for (const update of this.updates) update();
     }
 
-    private group(buttons: HTMLButtonElement[]) {
+    private group(buttons: HTMLButtonElement[]): HTMLElement {
         const group = document.createElement("div");
         group.className = "toolbar-group";
         group.setAttribute("role", "group");
         group.append(...buttons);
         this.element.append(group);
+        return group;
     }
 
     private button(title: string, icon: string, action: () => void): HTMLButtonElement {

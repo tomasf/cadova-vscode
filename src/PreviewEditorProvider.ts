@@ -9,6 +9,20 @@ class PreviewDocument implements vscode.CustomDocument {
 
 export type BuildStatus = "building" | "generating" | "failed" | "idle";
 
+/** A part of a model, one of its 3MF build items. */
+export interface ModelPart {
+    id: string;
+    name: string;
+    semantic: string;
+}
+
+/** The parts of the model in a preview, and which of them it hides. */
+export interface PreviewParts {
+    file: vscode.Uri;
+    parts: ModelPart[];
+    hidden: string[];
+}
+
 /** Shows 3MF files in a 3D preview that reloads whenever the file changes on disk. */
 export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvider<PreviewDocument> {
     static readonly viewType = "cadova.preview";
@@ -17,6 +31,10 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
     // The modification time of the file each panel last loaded, so a file is only loaded once per change
     private readonly loadedTimes = new WeakMap<vscode.WebviewPanel, number>();
     private activePanel: vscode.WebviewPanel | undefined;
+    private readonly partsByPanel = new WeakMap<vscode.WebviewPanel, PreviewParts>();
+    private readonly activePartsChange = new vscode.EventEmitter<void>();
+    /** Fires when the active preview changes, or the parts in it, or which of them are hidden. */
+    readonly onDidChangeActiveParts = this.activePartsChange.event;
 
     private static readonly optionsKey = "cadova.previewOptions";
 
@@ -42,6 +60,24 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
                 viewColumn: vscode.ViewColumn.Beside, preserveFocus: true,
             });
         }
+    }
+
+    /**
+     * The parts of the model in the active preview, or the last one active while another editor is.
+     * The preview decides which parts are hidden; these are as it last reported them.
+     */
+    get activeParts(): PreviewParts | undefined {
+        return this.activePanel && this.partsByPanel.get(this.activePanel);
+    }
+
+    /** Hides these parts in the active preview, and shows the rest. */
+    setHiddenParts(hidden: string[]) {
+        this.activePanel?.webview.postMessage({ type: "hiddenParts", hidden });
+    }
+
+    /** Outlines a part in the active preview, or none. */
+    highlightPart(id: string | null) {
+        this.activePanel?.webview.postMessage({ type: "highlightPart", id });
     }
 
     fitActive() {
@@ -99,7 +135,8 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
             reloadTimer = setTimeout(() => this.load(document.uri, panel), 100);
         };
 
-        if (panel.active) this.activePanel = panel;
+        if (panel.active) this.setActivePanel(panel);
+        this.updateContext();
         const disposables = [
             watcher,
             watcher.onDidChange(reload),
@@ -111,9 +148,13 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
                     this.load(document.uri, panel, true);
                 }
                 if (message.type === "options") this.state.update(PreviewEditorProvider.optionsKey, message.options);
+                if (message.type === "parts") {
+                    this.partsByPanel.set(panel, { file: document.uri, parts: message.parts, hidden: message.hidden });
+                    if (panel === this.activePanel) this.activePartsChange.fire();
+                }
             }),
             panel.onDidChangeViewState(() => {
-                if (panel.active) this.activePanel = panel;
+                if (panel.active) this.setActivePanel(panel);
             }),
         ];
         panel.onDidDispose(() => {
@@ -121,8 +162,20 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
             disposables.forEach((disposable) => disposable.dispose());
             panels.delete(panel);
             if (panels.size === 0) this.panels.delete(key);
-            if (this.activePanel === panel) this.activePanel = undefined;
+            if (this.activePanel === panel) this.setActivePanel(undefined);
+            this.updateContext();
         });
+    }
+
+    private setActivePanel(panel: vscode.WebviewPanel | undefined) {
+        if (panel === this.activePanel) return;
+        this.activePanel = panel;
+        this.activePartsChange.fire();
+    }
+
+    // Views about previews, such as the parts list, show while one is open
+    private updateContext() {
+        vscode.commands.executeCommand("setContext", "cadova.hasPreview", this.panels.size > 0);
     }
 
     private async load(file: vscode.Uri, panel: vscode.WebviewPanel, always = false) {
@@ -148,8 +201,8 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
     content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data: blob:;">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-    /* The web customizer's model view, which is dark in both themes like Cadova Viewer; only the
-       buttons over it follow the theme */
+    /* The web customizer's model view, which is dark in both themes like Cadova Viewer; the toolbar
+       above it and the menus follow VS Code's theme */
     :root {
         --viewer: #0d0d0d; --grid: #ffffff; --model: #ffffff;
         --axis-x: #ff453a; --axis-y: #30d158; --axis-z: #0a84ff;
@@ -158,41 +211,84 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
     body.vscode-dark, body.vscode-high-contrast:not(.vscode-high-contrast-light) {
         --panel: #1f1f1d; --text: #ecebe7; --line: #33322f; --accent: #f08a4b; --accent-soft: #3a2519;
     }
-    html, body { height: 100%; margin: 0; overflow: hidden; }
-    body { background: var(--viewer); color: #ffffff; font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    /* VS Code's default webview styles pad the body at the sides */
+    html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+    body {
+        display: flex; flex-direction: column; background: var(--viewer); color: #ffffff;
+        font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    #stage { position: relative; flex: 1; min-height: 0; }
     #viewer { position: absolute; inset: 0; overflow: hidden; }
     #viewer canvas { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
-    /* View options in a row over the top of the view, after Cadova Viewer's toolbar */
-    #toolbar {
-        position: absolute; top: 12px; left: 12px; right: 120px; display: flex; flex-wrap: wrap; gap: 6px;
-        pointer-events: none;
+    /* View options in a row of their own above the view, styled like VS Code's toolbars */
+    #topbar {
+        display: flex; align-items: center; gap: 8px; padding: 4px 8px;
+        background: var(--vscode-editor-background, var(--panel));
+        border-bottom: 1px solid var(--vscode-editorGroup-border, var(--vscode-panel-border, var(--line)));
+        color: var(--vscode-foreground, var(--text));
+        font-family: var(--vscode-font-family, system-ui, -apple-system, "Segoe UI", sans-serif);
+        font-size: 12px; line-height: 1; user-select: none;
     }
-    #toolbar[hidden] { display: none; }
-    .toolbar-group {
-        display: flex; pointer-events: auto; border-radius: 8px; overflow: hidden;
-        background: color-mix(in srgb, var(--panel) 82%, transparent); backdrop-filter: blur(8px);
-        border: 1px solid var(--line);
+    #toolbar { display: flex; flex-wrap: wrap; align-items: center; row-gap: 4px; min-width: 0; }
+    .toolbar-group { display: flex; align-items: center; gap: 2px; }
+    .toolbar-group[hidden] { display: none; }
+    /* A thin divider between groups, like the separators in VS Code's editor actions */
+    .toolbar-group:not(:first-child)::before {
+        content: ""; width: 1px; height: 16px; margin: 0 6px;
+        background: var(--vscode-menu-separatorBackground, var(--vscode-widget-border, var(--line)));
     }
     .toolbar-group button {
-        width: 30px; height: 28px; padding: 0; border: none; background: transparent; cursor: pointer;
-        display: grid; place-items: center; color: var(--text);
+        min-width: 24px; height: 24px; padding: 0 4px; border: 1px solid transparent; border-radius: 5px;
+        background: transparent; color: var(--vscode-icon-foreground, var(--text)); cursor: pointer;
+        display: grid; place-items: center; font: inherit;
     }
-    .toolbar-group button + button { border-left: 1px solid var(--line); }
-    .toolbar-group button.text { width: auto; padding: 0 8px; font: 500 12px system-ui, -apple-system, "Segoe UI", sans-serif; }
-    .toolbar-group button:hover { background: var(--panel); }
-    .toolbar-group button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
-    .toolbar-group button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .toolbar-group button.text { padding: 0 5px; }
+    .toolbar-group button:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, .2)); }
+    .toolbar-group button:active { background: var(--vscode-toolbar-activeBackground, rgba(128, 128, 128, .3)); }
+    /* An option that's on looks like the toggles in VS Code's find widget */
+    .toolbar-group button[aria-pressed="true"] {
+        background: var(--vscode-inputOption-activeBackground, var(--accent-soft));
+        border-color: var(--vscode-inputOption-activeBorder, transparent);
+        color: var(--vscode-inputOption-activeForeground, var(--accent));
+    }
+    .toolbar-group button:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: -1px; }
     .toolbar-group svg {
-        width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6;
+        width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5;
         stroke-linecap: round; stroke-linejoin: round;
     }
-    .model-size {
-        position: absolute; left: 16px; bottom: 14px; pointer-events: none;
-        font-size: 12px; color: #9c9a94; font-variant-numeric: tabular-nums; white-space: nowrap;
+    /* The model's info, like Cadova Viewer's info sheet, as a widget over the view's corner */
+    #info {
+        position: absolute; top: 8px; right: 8px; max-width: calc(100% - 32px); max-height: calc(100% - 16px);
+        overflow: auto; box-sizing: border-box; padding: 2px 12px;
+        background: var(--vscode-editorWidget-background, var(--panel));
+        color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, var(--text)));
+        border: 1px solid var(--vscode-editorWidget-border, var(--vscode-widget-border, var(--line)));
+        border-radius: 6px; box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, .36));
+        font-family: var(--vscode-font-family, system-ui, -apple-system, "Segoe UI", sans-serif); font-size: 12px;
     }
-    .model-size[hidden] { display: none; }
+    #info[hidden] { display: none; }
+    #info dl { display: grid; grid-template-columns: auto auto; gap: 4px 16px; margin: 0; padding: 8px 0; }
+    #info dl + dl { border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-widget-border, var(--line))); }
+    #info dt { color: var(--vscode-descriptionForeground, #9c9a94); }
+    #info dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; white-space: pre-line; overflow-wrap: anywhere; }
+    /* The parts menu's button, in the view's lower left corner */
+    #parts-button {
+        position: absolute; left: 12px; bottom: 12px; display: flex; align-items: center; gap: 6px;
+        height: 26px; padding: 0 10px 0 8px; border-radius: 6px; cursor: pointer;
+        background: color-mix(in srgb, var(--vscode-editorWidget-background, var(--panel)) 85%, transparent);
+        backdrop-filter: blur(12px); color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, var(--text)));
+        border: 1px solid var(--vscode-editorWidget-border, var(--vscode-widget-border, var(--line)));
+        font-family: var(--vscode-font-family, system-ui, -apple-system, "Segoe UI", sans-serif); font-size: 12px;
+    }
+    #parts-button[hidden] { display: none; }
+    #parts-button:hover { background: var(--vscode-editorWidget-background, var(--panel)); }
+    #parts-button:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: -1px; }
+    #parts-button svg {
+        width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5;
+        stroke-linecap: round; stroke-linejoin: round;
+    }
     #axis-indicator {
-        position: absolute; left: 16px; bottom: 34px; width: 110px; height: 110px;
+        position: absolute; right: 16px; bottom: 14px; width: 110px; height: 110px;
         pointer-events: none; filter: drop-shadow(0 0 2px black);
     }
     #axis-indicator line { stroke-width: 1; }
@@ -205,22 +301,58 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
         padding: 16px; color: #9c9a94; pointer-events: none;
     }
     #overlay[hidden] { display: none; }
+    /* What's happening to the model, in a pill at the bottom of the view, like Cadova Viewer's */
     #status {
-        position: absolute; top: 14px; right: 14px; font-size: 12.5px; color: var(--text);
-        background: color-mix(in srgb, var(--panel) 82%, transparent); backdrop-filter: blur(8px);
-        border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px;
+        position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+        display: flex; align-items: center; gap: 8px; padding: 8px 14px 8px 12px; white-space: nowrap;
+        background: color-mix(in srgb, var(--vscode-editorWidget-background, var(--panel)) 85%, transparent);
+        backdrop-filter: blur(12px); color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, var(--text)));
+        border: 1px solid rgba(255, 255, 255, .15); border-radius: 999px; box-shadow: 0 1px 4px rgba(0, 0, 0, .2);
+        font-family: var(--vscode-font-family, system-ui, -apple-system, "Segoe UI", sans-serif); font-size: 13px;
         opacity: 0; transition: opacity .15s; pointer-events: none;
     }
     #status.visible { opacity: 1; }
+    #status.busy::before {
+        content: ""; width: 12px; height: 12px; border-radius: 50%;
+        border: 2px solid currentColor; border-right-color: transparent; opacity: .8; animation: spin .8s linear infinite;
+    }
     #status.failed { color: var(--vscode-errorForeground, #f97066); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    /* Menus look like VS Code's own */
+    .menu {
+        position: fixed; z-index: 10; min-width: 160px; padding: 4px; border-radius: 6px;
+        box-sizing: border-box; max-height: calc(100vh - 8px); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+        background: var(--vscode-menu-background, var(--panel)); color: var(--vscode-menu-foreground, var(--text));
+        border: 1px solid var(--vscode-menu-border, var(--line)); box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
+        font: 13px system-ui, -apple-system, "Segoe UI", sans-serif; user-select: none;
+    }
+    .menu-item {
+        display: grid; grid-template-columns: 18px 1fr 14px; align-items: center; gap: 2px;
+        padding: 3px 8px 3px 4px; border-radius: 4px; cursor: default; white-space: nowrap;
+    }
+    .menu-item:hover {
+        background: var(--vscode-menu-selectionBackground, var(--accent));
+        color: var(--vscode-menu-selectionForeground, #ffffff);
+    }
+    .menu-item .check { text-align: center; }
+    .menu-item .arrow { text-align: right; }
+    .menu-header { padding: 4px 8px 2px; font-size: 11.5px; opacity: .65; }
+    .menu-separator { height: 1px; margin: 4px 6px; background: var(--vscode-menu-separatorBackground, var(--line)); }
+    .menu .alternate, .menu.alternate .normal { display: none; }
+    .menu.alternate .alternate { display: inline; }
 </style>
 </head>
 <body>
-<div id="viewer"></div>
-<div class="model-size" id="model-size" hidden></div>
-<div id="toolbar" role="toolbar" aria-label="View" hidden></div>
-<div id="overlay">Loading…</div>
-<div id="status"></div>
+<div id="topbar">
+    <div id="toolbar" role="toolbar" aria-label="View"></div>
+</div>
+<div id="stage">
+    <div id="viewer"></div>
+    <div id="info" hidden></div>
+    <button id="parts-button" type="button" aria-haspopup="menu" hidden></button>
+    <div id="overlay">Loading…</div>
+    <div id="status" role="status"></div>
+</div>
 <script nonce="${nonce}" src="${webview.asWebviewUri(script)}"></script>
 </body>
 </html>`;

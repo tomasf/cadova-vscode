@@ -9,36 +9,77 @@ import { setupLighting } from "./customizer/lighting.js";
 import { CameraRig, type ViewPreset } from "./CameraRig";
 import { EdgeOverlay } from "./EdgeOverlay";
 import { Toolbar, type ViewOptions } from "./Toolbar";
+import { PopupMenu, type MenuEntry, type MenuItem } from "./PopupMenu";
+import { PartHighlight } from "./PartHighlight";
+import { InfoPanel } from "./InfoPanel";
+
+/** What a preview remembers of its own: its view options, and the parts hidden in it, by ID. */
+interface PanelState {
+    options?: ViewOptions;
+    hiddenParts?: string[];
+}
 
 declare function acquireVsCodeApi(): {
     postMessage(message: unknown): void;
-    getState(): { options?: ViewOptions } | undefined;
-    setState(state: { options?: ViewOptions }): void;
+    getState(): PanelState | undefined;
+    setState(state: PanelState): void;
 };
 
 type ModelData = Uint8Array | ArrayBuffer | { type: "Buffer"; data: number[] };
+
+/** A part as the sidebar's parts list shows it. */
+interface PartSummary {
+    id: string;
+    name: string;
+    semantic: string;
+}
 
 type HostMessage =
     | { type: "model"; name: string; data: ModelData }
     | { type: "error"; message: string }
     | { type: "fit" }
     | { type: "options"; options: Partial<ViewOptions> }
-    | { type: "status"; status: Status };
+    | { type: "status"; status: Status }
+    | { type: "hiddenParts"; hidden: string[] }
+    | { type: "highlightPart"; id: string | null };
 
 type Status = "building" | "generating" | "loading" | "failed" | "idle";
 
-/** The pill over the view's corner that says what's happening to the model. */
+/** The pill at the bottom of the view that says what's happening to the model. */
 class StatusPill {
     private static readonly labels: Record<Status, string> = {
         building: "Building…", generating: "Generating…", loading: "Loading…", failed: "Build failed", idle: "",
     };
     private readonly element = document.getElementById("status")!;
+    private clearTimer: ReturnType<typeof setTimeout> | undefined;
 
     set(status: Status) {
-        // An idle pill keeps its text while it fades out
-        if (status !== "idle") this.element.textContent = StatusPill.labels[status];
+        // Going idle, the text fades out before it's removed, giving the toolbar its room back
+        clearTimeout(this.clearTimer);
+        if (status === "idle") this.clearTimer = setTimeout(() => { this.element.textContent = ""; }, 200);
+        else this.element.textContent = StatusPill.labels[status];
         this.element.classList.toggle("failed", status === "failed");
+        this.element.classList.toggle("busy", status !== "failed" && status !== "idle");
         this.element.classList.toggle("visible", status !== "idle");
+    }
+}
+
+/**
+ * The button in the view's lower left corner that opens the parts menu, saying how many parts are
+ * shown. It's there for a model with more than one part.
+ */
+class PartsButton {
+    private readonly element = document.getElementById("parts-button") as HTMLButtonElement;
+
+    constructor(onClick: (button: HTMLElement) => void) {
+        this.element.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3.5v3.5L12 13.5 5 10V6.5z M5 10v3.5l7 3.5 7-3.5V10 M5 13.5V17l7 3.5 7-3.5v-3.5"/></svg><span></span>`;
+        this.element.addEventListener("click", () => onClick(this.element));
+    }
+
+    update(total: number, visible: number) {
+        this.element.hidden = total <= 1;
+        this.element.querySelector("span")!.textContent =
+            visible === total ? "All Parts" : `${visible} ${visible === 1 ? "part" : "parts"}`;
     }
 }
 
@@ -51,7 +92,11 @@ class ModelViewer {
     private readonly root = document.documentElement;
     private readonly container = document.getElementById("viewer")!;
     private readonly overlay = document.getElementById("overlay")!;
-    private readonly modelSize = document.getElementById("model-size")!;
+    private readonly info = new InfoPanel();
+    private readonly partsButton = new PartsButton((button) => {
+        const rect = button.getBoundingClientRect();
+        PopupMenu.show(this.partsMenuEntries(), rect.left, rect.top - 4, { above: true });
+    });
 
     private readonly renderer = new THREE.WebGLRenderer({ alpha: true });
     private readonly viewportRenderer: ViewportRenderer;
@@ -59,17 +104,28 @@ class ModelViewer {
     private readonly rig = new CameraRig();
     private readonly controls: ViewportControls;
     private readonly grid: ViewportGrid;
+    // The grid hides itself when it's seen edge-on, so showing it is up to a group around it
+    private readonly gridHolder = new THREE.Group();
     private readonly origin = new OriginAxes();
     private readonly axisIndicator: AxisIndicator;
+    private readonly highlight: PartHighlight;
     readonly toolbar: Toolbar;
 
     private current: THREE.Object3D | null = null;
     private edges: EdgeOverlay | null = null;
     private framed = false;
+    private hasModel = false;
 
-    constructor(private options: ViewOptions, onOptionsChange: (options: ViewOptions) => void) {
+    constructor(
+        private options: ViewOptions,
+        private hiddenParts: Set<string>,
+        onOptionsChange: (options: ViewOptions) => void,
+        /** Called with the model's parts when a model is shown, and when which are hidden changes. */
+        private readonly onPartsChange: (parts: PartSummary[], hiddenParts: Set<string>) => void,
+    ) {
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.viewportRenderer = new ViewportRenderer(this.renderer);
+        this.highlight = new PartHighlight(this.renderer);
         this.container.append(this.renderer.domElement);
 
         this.scene.background = new THREE.Color(this.cssValue("--viewer"));
@@ -90,7 +146,8 @@ class ModelViewer {
         }
 
         this.grid = new ViewportGrid(this.cssValue("--grid"));
-        this.scene.add(this.grid);
+        this.gridHolder.add(this.grid);
+        this.scene.add(this.gridHolder);
         this.scene.add(this.origin);
         this.axisIndicator = new AxisIndicator(this.container);
 
@@ -109,7 +166,13 @@ class ModelViewer {
                 this.apply(next);
                 onOptionsChange(next);
             },
+            showMenu: (button) => {
+                const rect = button.getBoundingClientRect();
+                PopupMenu.show(this.showMenuEntries(), rect.left, rect.bottom + 4);
+            },
         });
+        this.listenForContextMenu();
+        this.renderer.domElement.addEventListener("pointerdown", () => this.highlightPart(null));
         this.apply(options);
 
         new ResizeObserver(() => this.resize()).observe(this.container);
@@ -123,25 +186,32 @@ class ModelViewer {
             this.grid.updateScale(camera, this.container.clientWidth, this.container.clientHeight);
             this.axisIndicator.update(camera);
             this.viewportRenderer.render(this.scene, camera);
+            this.highlight.render(camera);
         });
     }
 
     /** Shows a model, framing it the first time; later models keep the view, so rebuilds can be compared. */
     show(name: string, data: ModelData) {
         let object: THREE.Object3D;
+        const buffer = ModelViewer.arrayBuffer(data);
         try {
             // Parts without a color of their own get the page's model color
-            object = read3MF(ModelViewer.arrayBuffer(data), this.cssValue("--model"));
+            object = read3MF(buffer, this.cssValue("--model"));
         } catch (error) {
             this.showMessage(`Couldn't read ${name}: ${(error as Error).message}`);
             return;
         }
-        // The edges need the meshes as read, before smoothing unshares their vertices
+        // The edges and the counts need the meshes as read, before smoothing unshares their vertices
         const edges = new EdgeOverlay(object);
+        this.info.show({
+            name: name.replace(/\.3mf$/i, ""), fileSize: buffer.byteLength,
+            stats: InfoPanel.measure(object), metadata: object.userData.metadata ?? [],
+        });
         object.traverse((child) => {
             if (child instanceof THREE.Mesh) child.geometry = toCreasedNormals(child.geometry, THREE.MathUtils.degToRad(30));
         });
 
+        this.highlight.show(null, false, this.options.edges);
         if (this.current) {
             this.scene.remove(this.current);
             this.edges?.dispose();
@@ -155,17 +225,16 @@ class ModelViewer {
         this.current = object;
         this.edges = edges;
         this.scene.add(object);
-        this.apply(this.options);
+        this.showParts();
+        this.reportParts();
 
         const box = new THREE.Box3().setFromObject(object);
-        this.modelSize.textContent = ModelViewer.sizeText(box);
-        this.modelSize.hidden = box.isEmpty();
         this.controls.setModel(object, box);
         this.rig.setModelBox(box);
-        this.toolbar.hidden = false;
         this.grid.updateBounds(box);
-        this.origin.visible = !box.isEmpty();
+        this.hasModel = !box.isEmpty();
         this.axisIndicator.show();
+        this.apply(this.options);
 
         if (box.isEmpty()) {
             this.showMessage("The model is empty.");
@@ -195,6 +264,10 @@ class ModelViewer {
         this.toolbar?.update(options);
         this.rig.setProjection(options.projection);
         this.edges?.show(options.edges);
+        this.gridHolder.visible = options.showGrid;
+        this.origin.visible = options.showOrigin && this.hasModel;
+        this.axisIndicator.element.style.visibility = options.showAxisDirections ? "" : "hidden";
+        this.info.visible = options.showInfo && this.hasModel;
         this.current?.traverse((child) => {
             if (!(child instanceof THREE.Mesh)) return;
             for (const material of Array.isArray(child.material) ? child.material : [child.material]) {
@@ -202,6 +275,157 @@ class ModelViewer {
                 material.flatShading = !options.smoothShading;
                 material.needsUpdate = true;
             }
+        });
+    }
+
+    // Parts
+
+    /** The model's parts, its 3MF build items, as in Cadova Viewer. */
+    private get parts(): THREE.Object3D[] {
+        return this.current?.children ?? [];
+    }
+
+    // A part keeps its ID across rebuilds: its part number, which Cadova sets from the part's name
+    private static partID(part: THREE.Object3D): string {
+        return part.userData.partNumber ?? part.name;
+    }
+
+    setHiddenParts(hiddenParts: Set<string>) {
+        this.hiddenParts = hiddenParts;
+        this.showParts();
+        this.reportParts();
+    }
+
+    /** Outlines a part until the view is clicked, as the sidebar does for a part clicked there. */
+    highlightPart(id: string | null) {
+        const part = this.parts.find((part) => ModelViewer.partID(part) === id) ?? null;
+        this.highlight.show(part, id !== null && this.hiddenParts.has(id), this.options.edges);
+    }
+
+    private reportParts() {
+        const ids = this.parts.map(ModelViewer.partID);
+        this.partsButton.update(ids.length, ids.filter((id) => !this.hiddenParts.has(id)).length);
+        this.onPartsChange(this.parts.map((part) => ({
+            id: ModelViewer.partID(part), name: part.name, semantic: part.userData.semantic ?? "solid",
+        })), this.hiddenParts);
+    }
+
+    private showParts() {
+        for (const part of this.parts) part.visible = !this.hiddenParts.has(ModelViewer.partID(part));
+    }
+
+    // The one part shown, if only one is
+    private get onlyVisiblePart(): string | null {
+        const visible = this.parts.map(ModelViewer.partID).filter((id) => !this.hiddenParts.has(id));
+        return visible.length === 1 ? visible[0] : null;
+    }
+
+    /** Menu items that show or hide parts; with Option held, they show only that part. */
+    private partItems(parts: THREE.Object3D[]): MenuItem[] {
+        const allIDs = this.parts.map(ModelViewer.partID);
+        return parts.map((part) => {
+            const id = ModelViewer.partID(part);
+            return {
+                label: part.name,
+                checked: !this.hiddenParts.has(id),
+                action: () => {
+                    const hidden = new Set(this.hiddenParts);
+                    if (!hidden.delete(id)) hidden.add(id);
+                    this.setHiddenParts(hidden);
+                },
+                alternate: {
+                    checked: this.onlyVisiblePart === id,
+                    action: () => this.setHiddenParts(this.onlyVisiblePart === id
+                        ? new Set() : new Set(allIDs.filter((other) => other !== id))),
+                },
+                // Hovering a part outlines it, and shows it faintly if it's hidden
+                onHover: (hovered) => this.highlight.show(hovered ? part : null, this.hiddenParts.has(id), this.options.edges),
+            };
+        });
+    }
+
+    private showOrHideAllItem(): MenuItem {
+        return this.hiddenParts.size === 0
+            ? { label: "Hide All", action: () => this.setHiddenParts(new Set(this.parts.map(ModelViewer.partID))) }
+            : { label: "Show All", action: () => this.setHiddenParts(new Set()) };
+    }
+
+    // The toggles for what's shown besides the model, named as in Cadova Viewer's View menu
+    private viewToggleItems(): MenuItem[] {
+        const toggle = (label: string, key: "showGrid" | "showOrigin" | "showAxisDirections"): MenuItem => ({
+            label, checked: this.options[key], action: () => this.toolbar.set({ [key]: !this.options[key] }),
+        });
+        return [toggle("Grid", "showGrid"), toggle("Origin", "showOrigin"), toggle("Axis Directions", "showAxisDirections")];
+    }
+
+    // The toolbar's Show menu
+    private showMenuEntries(): MenuEntry[] {
+        return this.viewToggleItems();
+    }
+
+    // The parts button's menu, which works like the context menu's parts, with all of them
+    private partsMenuEntries(): MenuEntry[] {
+        return [{ header: "Parts", alternateHeader: "Show Only" }, ...this.partItems(this.parts), "separator", this.showOrHideAllItem()];
+    }
+
+    // Cadova Viewer's context menu: the parts under the pointer, then what's shown
+    private contextMenuEntries(x: number, y: number): MenuEntry[] {
+        const entries: MenuEntry[] = [];
+        if (this.parts.length > 1) {
+            const under = this.partsUnder(x, y);
+            if (under.length > 0) {
+                entries.push({ header: "Parts", alternateHeader: "Show Only" }, ...this.partItems(under));
+            }
+            entries.push(this.showOrHideAllItem(), "separator");
+        }
+        const edges = (label: string, edges: ViewOptions["edges"]): MenuItem => ({
+            label, checked: this.options.edges === edges, action: () => this.toolbar.set({ edges }),
+        });
+        entries.push({
+            label: "Show",
+            submenu: [...this.viewToggleItems(), "separator", edges("No Edges", "none"), edges("Sharp Edges", "sharp"), edges("All Edges", "all")],
+        });
+        return entries;
+    }
+
+    /**
+     * The parts under a point in the window, nearest first, hidden ones included. As in Cadova Viewer,
+     * rays over a small circle around the point find small parts that a single ray would miss.
+     */
+    private partsUnder(x: number, y: number): THREE.Object3D[] {
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        const raycaster = new THREE.Raycaster();
+        const distances = new Map<THREE.Object3D, number>();
+        const radius = 5;
+        const points = [[x, y], ...Array.from({ length: 8 }, (_, step) => {
+            const angle = step / 8 * Math.PI * 2;
+            return [x + Math.cos(angle) * radius, y + Math.sin(angle) * radius];
+        })];
+        for (const [px, py] of points) {
+            raycaster.setFromCamera(new THREE.Vector2((px - rect.left) / rect.width * 2 - 1, -((py - rect.top) / rect.height) * 2 + 1), this.rig.camera);
+            for (const part of this.parts) {
+                // Three.js tests hidden objects too, but its lines' hits are too wide to count
+                const hit = raycaster.intersectObject(part, true).find((hit) => hit.object instanceof THREE.Mesh);
+                if (hit && hit.distance < (distances.get(part) ?? Infinity)) distances.set(part, hit.distance);
+            }
+        }
+        return [...distances].sort((a, b) => a[1] - b[1]).map(([part]) => part);
+    }
+
+    // A right click opens the context menu, but a right drag pans, so the menu waits for the release.
+    // A Control-click is a right click on a Mac.
+    private listenForContextMenu() {
+        const canvas = this.renderer.domElement;
+        let press: { x: number; y: number } | null = null;
+        canvas.addEventListener("pointerdown", (event) => {
+            const secondary = event.button === 2 || (event.button === 0 && event.ctrlKey);
+            press = secondary && event.pointerType === "mouse" && !PopupMenu.isOpen ? { x: event.clientX, y: event.clientY } : null;
+        });
+        canvas.addEventListener("pointerup", (event) => {
+            if (!press) return;
+            const moved = Math.hypot(event.clientX - press.x, event.clientY - press.y) > 4;
+            press = null;
+            if (!moved) PopupMenu.show(this.contextMenuEntries(event.clientX, event.clientY), event.clientX, event.clientY);
         });
     }
 
@@ -226,14 +450,6 @@ class ModelViewer {
         this.rig.setAspect(width / height);
     }
 
-    // The model's size, such as "112 × 84 × 40 mm", in the model's units, which are millimeters by
-    // convention. A 2D model, built as a very thin solid, only has its width and depth.
-    private static sizeText(box: THREE.Box3): string {
-        const size = box.getSize(new THREE.Vector3());
-        const dimensions = size.z < 0.01 ? [size.x, size.y] : [size.x, size.y, size.z];
-        return `${dimensions.map((value) => String(Math.round(value * 10) / 10)).join(" × ")} mm`;
-    }
-
     // Bytes can arrive as a typed array, an ArrayBuffer, or a serialized Node Buffer
     private static arrayBuffer(data: ModelData): ArrayBuffer {
         if (data instanceof ArrayBuffer) return data;
@@ -249,13 +465,22 @@ const vscode = acquireVsCodeApi();
 const status = new StatusPill();
 
 // Each preview keeps its own options, and starts from the last ones chosen in any preview
-const defaultOptions: ViewOptions = { projection: "perspective", smoothShading: true, edges: "sharp" };
-const ownOptions = vscode.getState()?.options;
+const defaultOptions: ViewOptions = {
+    projection: "perspective", smoothShading: true, edges: "sharp",
+    showGrid: true, showOrigin: true, showAxisDirections: true, showInfo: false,
+};
+const state: PanelState = vscode.getState() ?? {};
+const ownOptions = state.options;
 let viewer: ModelViewer | null = null;
 try {
-    viewer = new ModelViewer({ ...defaultOptions, ...ownOptions }, (options) => {
-        vscode.setState({ options });
+    viewer = new ModelViewer({ ...defaultOptions, ...ownOptions }, new Set(state.hiddenParts), (options) => {
+        state.options = options;
+        vscode.setState(state);
         vscode.postMessage({ type: "options", options });
+    }, (parts, hiddenParts) => {
+        state.hiddenParts = [...hiddenParts];
+        vscode.setState(state);
+        vscode.postMessage({ type: "parts", parts, hidden: state.hiddenParts });
     });
 } catch (error) {
     const overlay = document.getElementById("overlay")!;
@@ -265,7 +490,7 @@ try {
 window.addEventListener("message", ({ data }: MessageEvent<HostMessage>) => {
     switch (data.type) {
         case "model":
-            // Reading a big model blocks the page, so the pill gets to show before it starts
+            // Reading a big model blocks the page, so the status gets to show before it starts
             status.set("loading");
             requestAnimationFrame(() => setTimeout(() => {
                 viewer?.show(data.name, data.data);
@@ -280,6 +505,12 @@ window.addEventListener("message", ({ data }: MessageEvent<HostMessage>) => {
             break;
         case "fit":
             viewer?.showPreset("isometric");
+            break;
+        case "hiddenParts":
+            viewer?.setHiddenParts(new Set(data.hidden));
+            break;
+        case "highlightPart":
+            viewer?.highlightPart(data.id);
             break;
         case "status":
             status.set(data.status);

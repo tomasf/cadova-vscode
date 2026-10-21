@@ -4,6 +4,7 @@ import { ModelBuilder, type BuildRequest } from "./ModelBuilder";
 import { PreviewBuilds } from "./PreviewBuilds";
 import { ModelCodeLensProvider } from "./ModelCodeLensProvider";
 import { PreviewEditorProvider } from "./PreviewEditorProvider";
+import { PartsView } from "./PartsView";
 import { SwiftPackage } from "./SwiftPackage";
 
 export function activate(context: vscode.ExtensionContext) {
@@ -20,6 +21,7 @@ export function activate(context: vscode.ExtensionContext) {
         output,
         builder,
         previewBuilds,
+        new PartsView(preview),
         manifestWatcher,
         manifestWatcher.onDidChange(forgetManifest),
         manifestWatcher.onDidCreate(forgetManifest),
