@@ -323,22 +323,6 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
     #info dl + dl { border-top: 1px solid var(--vscode-editorWidget-border, var(--vscode-widget-border, var(--line))); }
     #info dt { color: var(--vscode-descriptionForeground, #9c9a94); }
     #info dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; white-space: pre-line; overflow-wrap: anywhere; }
-    /* The parts menu's button, in the view's lower left corner */
-    #parts-button {
-        position: absolute; left: 12px; bottom: 12px; display: flex; align-items: center; gap: 6px;
-        height: 26px; padding: 0 10px 0 8px; border-radius: 6px; cursor: pointer;
-        background: color-mix(in srgb, var(--vscode-editorWidget-background, var(--panel)) 85%, transparent);
-        backdrop-filter: blur(12px); color: var(--vscode-editorWidget-foreground, var(--vscode-foreground, var(--text)));
-        border: 1px solid var(--vscode-editorWidget-border, var(--vscode-widget-border, var(--line)));
-        font-family: var(--vscode-font-family, system-ui, -apple-system, "Segoe UI", sans-serif); font-size: 12px;
-    }
-    #parts-button[hidden] { display: none; }
-    #parts-button:hover { background: var(--vscode-editorWidget-background, var(--panel)); }
-    #parts-button:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: -1px; }
-    #parts-button svg {
-        width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5;
-        stroke-linecap: round; stroke-linejoin: round;
-    }
     /* Cross-sections: a chip for each in the view's top left corner, after Cadova Viewer's */
     #sections { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }
     #sections[hidden] { display: none; }
@@ -476,7 +460,6 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
     <div id="sections" hidden></div>
     <div id="info" hidden></div>
     <div id="measure-readout" hidden></div>
-    <button id="parts-button" type="button" aria-haspopup="menu" hidden></button>
     <div id="overlay">Loading…</div>
     <div id="section-bar" hidden></div>
     <div id="status" role="status"></div>

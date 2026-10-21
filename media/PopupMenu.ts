@@ -23,8 +23,8 @@ export class PopupMenu {
     private readonly listeners: [EventTarget, string, EventListener][] = [];
     private hovered: MenuItem | null = null;
 
-    private constructor(entries: MenuEntry[], x: number, y: number, above: boolean, private readonly onClose: () => void) {
-        this.elements.push(this.list(entries, x, y, undefined, above));
+    private constructor(entries: MenuEntry[], x: number, y: number, private readonly onClose: () => void) {
+        this.elements.push(this.list(entries, x, y));
         // Listening from the next event on, so the click that opened the menu doesn't close it
         setTimeout(() => {
             this.listen(window, "pointerdown", (event) => {
@@ -57,13 +57,10 @@ export class PopupMenu {
         });
     }
 
-    /**
-     * Opens a menu with its top left corner at a point, or its bottom left corner when it opens
-     * above the point, moved in to fit the window.
-     */
-    static show(entries: MenuEntry[], x: number, y: number, { above = false, onClose = () => {} } = {}): PopupMenu {
+    /** Opens a menu with its top left corner at a point, moved in to fit the window. */
+    static show(entries: MenuEntry[], x: number, y: number, { onClose = () => {} } = {}): PopupMenu {
         PopupMenu.open?.close();
-        PopupMenu.open = new PopupMenu(entries, x, y, above, onClose);
+        PopupMenu.open = new PopupMenu(entries, x, y, onClose);
         return PopupMenu.open;
     }
 
@@ -96,7 +93,7 @@ export class PopupMenu {
         for (const element of this.elements) element.classList.toggle("alternate", on);
     }
 
-    private list(entries: MenuEntry[], x: number, y: number, parentRow?: HTMLElement, above = false): HTMLElement {
+    private list(entries: MenuEntry[], x: number, y: number, parentRow?: HTMLElement): HTMLElement {
         const list = document.createElement("div");
         list.className = "menu";
         list.setAttribute("role", "menu");
@@ -152,7 +149,6 @@ export class PopupMenu {
         if (x + width > window.innerWidth - 4) {
             x = parentRow ? parentRow.getBoundingClientRect().left - width + 2 : window.innerWidth - width - 4;
         }
-        if (above) y -= height;
         list.style.left = `${Math.max(4, x)}px`;
         list.style.top = `${Math.max(4, Math.min(y, window.innerHeight - height - 4))}px`;
         return list;

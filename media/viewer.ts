@@ -89,25 +89,6 @@ class StatusPill {
 }
 
 /**
- * The button in the view's lower left corner that opens the parts menu, saying how many parts are
- * shown. It's there for a model with more than one part.
- */
-class PartsButton {
-    private readonly element = document.getElementById("parts-button") as HTMLButtonElement;
-
-    constructor(onClick: (button: HTMLElement) => void) {
-        this.element.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3.5v3.5L12 13.5 5 10V6.5z M5 10v3.5l7 3.5 7-3.5V10 M5 13.5V17l7 3.5 7-3.5v-3.5"/></svg><span></span>`;
-        this.element.addEventListener("click", () => onClick(this.element));
-    }
-
-    update(total: number, visible: number) {
-        this.element.hidden = total <= 1;
-        this.element.querySelector("span")!.textContent =
-            visible === total ? "All Parts" : `${visible} ${visible === 1 ? "part" : "parts"}`;
-    }
-}
-
-/**
  * The view's navigation, turning and zooming around the nearest surface you can see under the
  * pointer, as in Cadova Viewer: not a hidden part or what a cross-section cuts away, and a cut face.
  */
@@ -138,10 +119,6 @@ class ModelViewer {
     private readonly container = document.getElementById("viewer")!;
     private readonly overlay = document.getElementById("overlay")!;
     private readonly info = new InfoPanel();
-    private readonly partsButton = new PartsButton((button) => {
-        const rect = button.getBoundingClientRect();
-        PopupMenu.show(this.partsMenuEntries(), rect.left, rect.top - 4, { above: true });
-    });
 
     private readonly renderer = new THREE.WebGLRenderer({ alpha: true });
     private readonly viewportRenderer: ViewportRenderer;
@@ -429,8 +406,6 @@ class ModelViewer {
     }
 
     private reportParts(newModel = false) {
-        const ids = this.parts.map(ModelViewer.partID);
-        this.partsButton.update(ids.length, ids.filter((id) => !this.hiddenParts.has(id)).length);
         this.events.partsChanged(this.parts.map((part) => ({
             id: ModelViewer.partID(part), name: part.name, semantic: part.userData.semantic ?? "solid",
         })), this.hiddenParts, newModel);
@@ -490,11 +465,6 @@ class ModelViewer {
     // The toolbar's Show menu
     private showMenuEntries(): MenuEntry[] {
         return this.viewToggleItems();
-    }
-
-    // The parts button's menu, which works like the context menu's parts, with all of them
-    private partsMenuEntries(): MenuEntry[] {
-        return [{ header: "Parts", alternateHeader: "Show Only" }, ...this.partItems(this.parts), "separator", this.showOrHideAllItem()];
     }
 
     // Cadova Viewer's context menu: the parts under the pointer, then what's shown
