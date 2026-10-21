@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { SwiftModelScanner } from "./SwiftModelScanner";
 import type { BuildRequest } from "./ModelBuilder";
 
-/** Shows build actions above each model and project in Swift files that import Cadova. */
+/** Shows Generate and Preview actions above each model and project in Swift files that import Cadova. */
 export class ModelCodeLensProvider implements vscode.CodeLensProvider {
     private readonly changeEmitter = new vscode.EventEmitter<void>();
     readonly onDidChangeCodeLenses = this.changeEmitter.event;
@@ -25,14 +25,14 @@ export class ModelCodeLensProvider implements vscode.CodeLensProvider {
             const what = declaration.kind === "project" ? "All" : "";
             return [
                 new vscode.CodeLens(range, {
-                    title: `$(play) Build ${what}`.trimEnd(),
-                    tooltip: declaration.filterName ? `Build ${declaration.filterName}` : "Build every model in the project",
+                    title: `$(play) Generate ${what}`.trimEnd(),
+                    tooltip: declaration.filterName ? `Generate ${declaration.filterName}, compiling the package first` : "Generate every model in the project, compiling the package first",
                     command: "cadova.buildModel",
                     arguments: [request],
                 }),
                 new vscode.CodeLens(range, {
                     title: `$(eye) Preview ${what}`.trimEnd(),
-                    tooltip: "Build, then show the result beside the code",
+                    tooltip: "Generate, then show the result beside the code",
                     command: "cadova.buildAndPreviewModel",
                     arguments: [request],
                 }),

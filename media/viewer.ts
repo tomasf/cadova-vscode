@@ -72,7 +72,7 @@ type Status = "building" | "generating" | "loading" | "failed" | "idle";
 /** The pill at the bottom of the view that says what's happening to the model. */
 class StatusPill {
     private static readonly labels: Record<Status, string> = {
-        building: "Building…", generating: "Generating…", loading: "Loading…", failed: "Build failed", idle: "",
+        building: "Compiling…", generating: "Generating…", loading: "Loading…", failed: "Generating failed", idle: "",
     };
     private readonly element = document.getElementById("status")!;
     private clearTimer: ReturnType<typeof setTimeout> | undefined;

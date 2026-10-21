@@ -48,7 +48,7 @@ export class ModelBuilder implements vscode.Disposable {
 
         return vscode.window.withProgress({
             location: vscode.ProgressLocation.Window,
-            title: `$(loading~spin) Building ${label}`,
+            title: `$(loading~spin) Generating ${label}`,
         }, async () => {
             let product: string;
             try {
@@ -113,10 +113,10 @@ export class ModelBuilder implements vscode.Disposable {
                 if (replaced) {
                     resolve({ outcome: "replaced" });
                 } else if (code !== 0 || signal) {
-                    this.reportFailure(`Building ${label} failed.`);
+                    this.reportFailure(`Generating ${label} failed.`);
                     resolve({ outcome: "failed" });
                 } else {
-                    if (written.length === 0) vscode.window.showWarningMessage(`Building ${label} wrote no model files.`);
+                    if (written.length === 0) vscode.window.showWarningMessage(`Generating ${label} wrote no model files.`);
                     resolve({ outcome: "succeeded", written });
                 }
             });

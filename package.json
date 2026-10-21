@@ -1,7 +1,7 @@
 {
   "name": "cadova",
   "displayName": "Cadova",
-  "description": "Build and preview Cadova models from VS Code.",
+  "description": "Generate and preview Cadova models from VS Code.",
   "version": "0.1.0",
   "publisher": "tomasf",
   "license": "MIT",
@@ -36,17 +36,17 @@
     "commands": [
       {
         "command": "cadova.buildModel",
-        "title": "Build Model",
+        "title": "Generate Model",
         "category": "Cadova"
       },
       {
         "command": "cadova.buildAndPreviewModel",
-        "title": "Build and Preview Model",
+        "title": "Generate and Preview Model",
         "category": "Cadova"
       },
       {
         "command": "cadova.rebuildPreview",
-        "title": "Rebuild Model",
+        "title": "Regenerate Model",
         "category": "Cadova",
         "icon": "$(refresh)"
       },
@@ -241,7 +241,7 @@
         "cadova.swiftPath": {
           "type": "string",
           "default": "swift",
-          "description": "The swift executable used to build models."
+          "description": "The swift executable used to compile and run model packages."
         },
         "cadova.buildConfiguration": {
           "type": "string",
@@ -250,17 +250,17 @@
             "release"
           ],
           "default": "debug",
-          "description": "The configuration models are built with. Release takes longer to compile but builds complex models faster."
+          "description": "The configuration model packages are compiled with. Release takes longer to compile but generates complex models faster."
         },
         "cadova.rebuildOnSave": {
           "type": "boolean",
           "default": true,
-          "description": "Rebuild the models open in previews whenever a Swift file in their package is saved."
+          "description": "Regenerate the models open in previews whenever a Swift file in their package is saved."
         },
         "cadova.codeLens": {
           "type": "boolean",
           "default": true,
-          "description": "Show build actions above each model and project."
+          "description": "Show Generate and Preview actions above each model and project."
         }
       }
     },

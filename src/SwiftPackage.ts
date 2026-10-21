@@ -66,8 +66,8 @@ export class SwiftPackage {
             : executables.length === 1 ? executables[0] : undefined;
         if (!product) {
             throw new Error(executables.length === 0
-                ? "The package has no executable product to build models with."
-                : `Couldn't tell which executable builds ${path.basename(filePath)}.`);
+                ? "The package has no executable product to generate models with."
+                : `Couldn't tell which executable generates ${path.basename(filePath)}.`);
         }
         return product.name;
     }
