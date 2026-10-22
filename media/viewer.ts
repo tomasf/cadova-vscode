@@ -467,9 +467,20 @@ class ModelViewer {
         return [toggle("Grid", "showGrid"), toggle("Origin", "showOrigin"), toggle("Axis Directions", "showAxisDirections")];
     }
 
-    // The toolbar's Show menu
+    // The toolbar's Show menu, which is also the context menu's: what's shown besides the model, then
+    // how the model is drawn, in Cadova Viewer's order
     private showMenuEntries(): MenuEntry[] {
-        return this.viewToggleItems();
+        const edges = (label: string, edges: ViewOptions["edges"]): MenuItem => ({
+            label, checked: this.options.edges === edges, action: () => this.toolbar.set({ edges }),
+        });
+        const smoothShading: MenuItem = {
+            label: "Smooth Shading", checked: this.options.smoothShading,
+            action: () => this.toolbar.set({ smoothShading: !this.options.smoothShading }),
+        };
+        return [
+            ...this.viewToggleItems(), "separator", smoothShading, "separator",
+            edges("No Edges", "none"), edges("Sharp Edges", "sharp"), edges("All Edges", "all"),
+        ];
     }
 
     // Cadova Viewer's context menu: the parts under the pointer, then what's shown
@@ -482,13 +493,7 @@ class ModelViewer {
             }
             entries.push(this.showOrHideAllItem(), "separator");
         }
-        const edges = (label: string, edges: ViewOptions["edges"]): MenuItem => ({
-            label, checked: this.options.edges === edges, action: () => this.toolbar.set({ edges }),
-        });
-        entries.push({
-            label: "Show",
-            submenu: [...this.viewToggleItems(), "separator", edges("No Edges", "none"), edges("Sharp Edges", "sharp"), edges("All Edges", "all")],
-        });
+        entries.push({ label: "Show", submenu: this.showMenuEntries() });
         return entries;
     }
 

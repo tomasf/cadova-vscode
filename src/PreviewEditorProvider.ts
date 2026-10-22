@@ -281,9 +281,12 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
         font-family: var(--vscode-font-family, system-ui, -apple-system, "Segoe UI", sans-serif);
         font-size: 12px; line-height: 1; user-select: none;
     }
-    #toolbar { display: flex; flex-wrap: wrap; align-items: center; row-gap: 4px; min-width: 0; }
+    #toolbar { flex: 1; display: flex; flex-wrap: wrap; align-items: center; row-gap: 4px; min-width: 0; }
     .toolbar-group { display: flex; align-items: center; gap: 2px; }
     .toolbar-group[hidden] { display: none; }
+    /* The groups from this one on sit at the right end, apart from the others */
+    .toolbar-group.trailing { margin-left: auto; }
+    .toolbar-group.trailing::before { display: none; }
     /* A thin divider between groups, like the separators in VS Code's editor actions */
     .toolbar-group:not(:first-child)::before {
         content: ""; width: 1px; height: 16px; margin: 0 6px;
@@ -294,7 +297,6 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
         background: transparent; color: var(--vscode-icon-foreground, var(--text)); cursor: pointer;
         display: grid; place-items: center; font: inherit;
     }
-    .toolbar-group button.text { padding: 0 5px; }
     .toolbar-group button:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, .2)); }
     .toolbar-group button:active { background: var(--vscode-toolbar-activeBackground, rgba(128, 128, 128, .3)); }
     /* An option that's on looks like the toggles in VS Code's find widget */
@@ -302,6 +304,11 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
         background: var(--vscode-inputOption-activeBackground, var(--accent-soft));
         border-color: var(--vscode-inputOption-activeBorder, transparent);
         color: var(--vscode-inputOption-activeForeground, var(--accent));
+    }
+    /* In a group where one is always chosen, the chosen one is only shaded, like a pressed button */
+    .toolbar-group.picker button[aria-pressed="true"] {
+        background: var(--vscode-toolbar-activeBackground, rgba(128, 128, 128, .25));
+        border-color: transparent; color: var(--vscode-icon-foreground, var(--text));
     }
     .toolbar-group button:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: -1px; }
     .toolbar-group svg {

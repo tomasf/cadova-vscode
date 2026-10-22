@@ -23,10 +23,19 @@ export interface ToolbarActions {
     setMeasuring(on: boolean): void;
 }
 
-// Cadova Viewer's short titles for the standard views. Icons for them are too alike to tell apart at
-// toolbar size: only the shaded face differs, and half the faces are hidden behind the others.
-const presetLabels: Record<ViewPreset, string> = {
-    isometric: "Iso", front: "Front", back: "Back", left: "Left", right: "Right", top: "Top", bottom: "Bottom",
+// Cadova Viewer's icons for the standard views: a cube with the face you'd see filled in. The cube turns
+// so that face is one of those in sight, and the back is seen through the front.
+const presetIcons: Record<ViewPreset, string> = {
+    isometric: `<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z M4 7.5l8 4.5 8-4.5 M12 12v9"/>`,
+    // Seen from the top left
+    front: `<path d="M7 7h13v13H7z" fill="currentColor"/><path d="M3 3h13l4 4H7z M3 3l4 4v13l-4-4z"/>`,
+    back: `<path d="M3 3h13v13H3z" fill="currentColor" fill-opacity=".45" stroke="none"/><path d="M7 7h13v13H7z M3 3h13l4 4H7z M3 3l4 4v13l-4-4z"/>`,
+    left: `<path d="M3 3l4 4v13l-4-4z" fill="currentColor"/><path d="M7 7h13v13H7z M3 3h13l4 4H7z"/>`,
+    top: `<path d="M3 3h13l4 4H7z" fill="currentColor"/><path d="M7 7h13v13H7z M3 3l4 4v13l-4-4z"/>`,
+    // Seen from the top right
+    right: `<path d="M17 7l4-4v13l-4 4z" fill="currentColor"/><path d="M4 7h13v13H4z M8 3h13l-4 4H4z"/>`,
+    // Seen from the bottom left
+    bottom: `<path d="M3 21l4-4h13l-4 4z" fill="currentColor"/><path d="M7 4h13v13H7z M3 8l4-4v13l-4 4z"/>`,
 };
 
 const icons = {
@@ -34,13 +43,9 @@ const icons = {
     orthographic: `<path d="M5 5h14v14H5z M5 12h14 M12 5v14"/>`,
     zoomIn: `<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5 M10.5 8v5 M8 10.5h5"/>`,
     zoomOut: `<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5 M8 10.5h5"/>`,
-    smooth: `<circle cx="12" cy="12" r="8"/><path d="M8.5 9a4.5 4.5 0 0 1 3.5-2.5" />`,
-    edgesNone: `<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" fill="currentColor" fill-opacity=".35" stroke="none"/>`,
-    edgesSharp: `<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z M4 7.5l8 4.5 8-4.5 M12 12v9" fill="currentColor" fill-opacity=".2"/>`,
     info: `<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5"/><circle cx="12" cy="7.75" r=".6" fill="currentColor"/>`,
     measure: `<path d="M3.5 15.5l12-12 5 5-12 12z M7 12l1.5 1.5 M9.5 9.5l2 2 M12 7l1.5 1.5"/>`,
     show: `<path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>`,
-    edgesAll: `<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z M4 7.5l8 4.5 8-4.5 M12 12v9 M4 7.5l8 13.5 M12 3v9 M20 7.5l-8 13.5 M4 16.5l16-9 M20 16.5l-16-9" stroke-width="1.1" fill="currentColor" fill-opacity=".2"/>`,
 };
 
 /** The row of view controls above the model, after Cadova Viewer's toolbar and View menu. */
@@ -49,36 +54,26 @@ export class Toolbar {
     private readonly updates: (() => void)[] = [];
 
     constructor(private options: ViewOptions, private readonly actions: ToolbarActions) {
+        // Moving the camera on the left
+        this.group([
+            this.button("Zoom Out", icons.zoomOut, () => actions.zoom(-1)),
+            this.button("Zoom In", icons.zoomIn, () => actions.zoom(1)),
+        ]);
+        this.group((Object.keys(presetIcons) as ViewPreset[]).map((preset) =>
+            this.button(`${CameraRig.presets[preset].title} View`, presetIcons[preset], () => actions.showPreset(preset))));
+        // One projection is always chosen, so the chosen one is marked quietly
         this.group([
             this.choice("Perspective", icons.perspective, () => this.options.projection === "perspective",
                 () => this.set({ projection: "perspective" })),
             this.choice("Orthographic", icons.orthographic, () => this.options.projection === "orthographic",
                 () => this.set({ projection: "orthographic" })),
-        ]);
-        this.group([
-            this.button("Zoom Out", icons.zoomOut, () => actions.zoom(-1)),
-            this.button("Zoom In", icons.zoomIn, () => actions.zoom(1)),
-        ]);
-        this.group((Object.keys(presetLabels) as ViewPreset[]).map((preset) => {
-            const button = this.button(`${CameraRig.presets[preset].title} View`, "", () => actions.showPreset(preset));
-            button.className = "text";
-            button.textContent = presetLabels[preset];
-            return button;
-        }));
-        this.group([
-            this.choice("Smooth Shading", icons.smooth, () => this.options.smoothShading,
-                () => this.set({ smoothShading: !this.options.smoothShading })),
-        ]);
-        this.group([
-            this.choice("No Edges", icons.edgesNone, () => this.options.edges === "none", () => this.set({ edges: "none" })),
-            this.choice("Sharp Edges", icons.edgesSharp, () => this.options.edges === "sharp", () => this.set({ edges: "sharp" })),
-            this.choice("All Edges", icons.edgesAll, () => this.options.edges === "all", () => this.set({ edges: "all" })),
-        ]);
-        this.group([this.choice("Measure", icons.measure, () => actions.measuring, () => actions.setMeasuring(!actions.measuring))]);
-        // Things shown less often to change, such as the grid, are in a menu
+        ]).classList.add("picker");
+        // What's shown and the tools on the right. Things changed less often, such as the grid, shading
+        // and edges, are in a menu.
         const show = this.button("Show", icons.show, () => actions.showMenu(show));
         show.setAttribute("aria-haspopup", "menu");
-        this.group([show]);
+        this.group([show]).classList.add("trailing");
+        this.group([this.choice("Measure", icons.measure, () => actions.measuring, () => actions.setMeasuring(!actions.measuring))]);
         // Cadova Viewer's info sheet, as a panel that stays open
         this.group([this.choice("Info", icons.info, () => this.options.showInfo,
             () => this.set({ showInfo: !this.options.showInfo }))]);
