@@ -10,6 +10,13 @@ interface Pose {
     halfHeight: number;
 }
 
+/** Where the camera is, as a preview remembers it: a pose in plain numbers. */
+export interface SavedCamera {
+    position: [number, number, number];
+    quaternion: [number, number, number, number];
+    halfHeight: number;
+}
+
 interface Flight {
     from: Pose;
     to: Pose;
@@ -137,6 +144,22 @@ export class CameraRig {
         const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.perspective.quaternion);
         const depth = Math.abs(point.clone().sub(this.perspective.position).dot(forward));
         return 2 * depth * tanHalfFieldOfView / height;
+    }
+
+    /** Where the camera is now, to be put back with `restore`. */
+    get saved(): SavedCamera {
+        const { position, quaternion, halfHeight } = this.currentPose();
+        return { position: position.toArray(), quaternion: quaternion.toArray() as SavedCamera["quaternion"], halfHeight };
+    }
+
+    /** Puts the camera where it was saved, in whichever projection is in use. */
+    restore(saved: SavedCamera) {
+        this.flight = null;
+        this.apply({
+            position: new THREE.Vector3().fromArray(saved.position),
+            quaternion: new THREE.Quaternion().fromArray(saved.quaternion).normalize(),
+            halfHeight: saved.halfHeight > 0 ? saved.halfHeight : this.orthographic.top,
+        });
     }
 
     /** Stops a flight where it is, such as when the view is grabbed. */

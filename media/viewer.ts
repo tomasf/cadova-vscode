@@ -6,7 +6,7 @@ import { ViewportGrid } from "./customizer/grid.js";
 import { OriginAxes, AxisIndicator } from "./customizer/axes.js";
 import { ViewportRenderer } from "./customizer/rendering.js";
 import { setupLighting } from "./customizer/lighting.js";
-import { CameraRig, type ViewPreset } from "./CameraRig";
+import { CameraRig, type SavedCamera, type ViewPreset } from "./CameraRig";
 import { EdgeOverlay } from "./EdgeOverlay";
 import { Toolbar, type ViewOptions } from "./Toolbar";
 import { PopupMenu, type MenuEntry, type MenuItem } from "./PopupMenu";
@@ -19,12 +19,13 @@ import type { CrossSection } from "./CrossSection";
 import { SurfacePicker } from "./SurfacePicker";
 import { MeasurementTool, type Measurement } from "./MeasurementTool";
 
-/** What a preview remembers of its own: its view options, and the parts hidden in it, by ID. */
+/** What a preview remembers of its own: its view options, the parts hidden in it, by ID, and where its camera is. */
 interface PanelState {
     options?: ViewOptions;
     hiddenParts?: string[];
     measurements?: Measurement[];
     sections?: CrossSection[];
+    camera?: SavedCamera;
 }
 
 declare function acquireVsCodeApi(): {
@@ -52,6 +53,8 @@ interface ViewerEvents {
     /** The measurements, with the point under the pointer while measuring. */
     measurementsChanged(measurements: Measurement[]): void;
     sectionsChanged(sections: CrossSection[]): void;
+    /** The camera moved, once the model has been framed. */
+    cameraChanged(camera: SavedCamera): void;
 }
 
 type HostMessage =
@@ -140,6 +143,8 @@ class ModelViewer {
     private readonly picker: SurfacePicker;
     private edges: EdgeOverlay | null = null;
     private framed = false;
+    // Where the camera was when the preview was last open, to go back to rather than framing the model
+    private savedCamera: SavedCamera | null;
     private hasModel = false;
 
     // The view is drawn only when the camera moves, or for a while after anything else that could
@@ -154,8 +159,9 @@ class ModelViewer {
         private options: ViewOptions,
         private hiddenParts: Set<string>,
         private readonly events: ViewerEvents,
-        saved: { measurements: Measurement[]; sections: CrossSection[] },
+        saved: { measurements: Measurement[]; sections: CrossSection[]; camera?: SavedCamera },
     ) {
+        this.savedCamera = saved.camera ?? null;
         this.renderer.setPixelRatio(window.devicePixelRatio);
         // Cross-sections clip the model's materials, and only those
         this.renderer.localClippingEnabled = true;
@@ -263,6 +269,8 @@ class ModelViewer {
             if (!moved && time > this.redrawUntil) return;
             this.drawnView.copy(camera.matrixWorld);
             this.drawnProjection.copy(camera.projectionMatrix);
+            // Before the model is framed, the camera is nowhere worth remembering
+            if (moved && this.framed) events.cameraChanged(this.rig.saved);
             this.grid.updateScale(camera, this.container.clientWidth, this.container.clientHeight);
             this.axisIndicator.update(camera);
             this.sections.render(time);
@@ -331,7 +339,8 @@ class ModelViewer {
             this.overlay.hidden = true;
             if (!this.framed) {
                 this.controls.reset();
-                this.rig.show("isometric", false);
+                if (this.savedCamera) this.rig.restore(this.savedCamera);
+                else this.rig.show("isometric", false);
                 this.framed = true;
             }
         }
@@ -598,6 +607,7 @@ try {
     // The list in the sidebar follows the point under the pointer, but needn't on every move
     let measurementsTimer: ReturnType<typeof setTimeout> | undefined;
     let pendingMeasurements: Measurement[] = [];
+    let cameraTimer: ReturnType<typeof setTimeout> | undefined;
     viewer = new ModelViewer({ ...defaultOptions, ...ownOptions }, new Set(state.hiddenParts), {
         optionsChanged(options) {
             state.options = options;
@@ -628,7 +638,13 @@ try {
             state.sections = sections;
             vscode.setState(state);
         },
-    }, { measurements: state.measurements ?? [], sections: state.sections ?? [] });
+        // The camera moves every frame of a drag, but only needs remembering where it stops
+        cameraChanged(camera) {
+            state.camera = camera;
+            clearTimeout(cameraTimer);
+            cameraTimer = setTimeout(() => vscode.setState(state), 300);
+        },
+    }, { measurements: state.measurements ?? [], sections: state.sections ?? [], camera: state.camera });
     // Measurements from before, for the list
     vscode.postMessage({ type: "measurements", measurements: state.measurements ?? [] });
 } catch (error) {
