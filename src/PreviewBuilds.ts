@@ -13,6 +13,8 @@ export class PreviewBuilds implements vscode.Disposable {
     private readonly disposables: vscode.Disposable[] = [];
     private saveTimer: NodeJS.Timeout | undefined;
     private readonly savedFiles = new Set<string>();
+    // The build each previewed model file is waiting on, while one runs
+    private readonly running = new Map<string, Promise<BuildResult>>();
 
     constructor(private readonly builder: ModelBuilder, private readonly previews: PreviewEditorProvider) {
         this.disposables.push(vscode.workspace.onDidSaveTextDocument((document) => this.documentSaved(document)));
@@ -35,9 +37,14 @@ export class PreviewBuilds implements vscode.Disposable {
     async build(request: BuildRequest, previewedFiles?: string[]): Promise<BuildResult> {
         const files = previewedFiles ?? await this.previewedFiles(request);
         for (const file of files) this.previews.setStatus(file, "building");
-        const result = await this.builder.build(request, (phase) => {
+        const build = this.builder.build(request, (phase) => {
             for (const file of files) this.previews.setStatus(file, phase);
         });
+        for (const file of files) this.running.set(file, build);
+        const result = await build;
+        for (const file of files) {
+            if (this.running.get(file) === build) this.running.delete(file);
+        }
 
         switch (result.outcome) {
             case "succeeded":
@@ -60,6 +67,11 @@ export class PreviewBuilds implements vscode.Disposable {
                 break;
         }
         return result;
+    }
+
+    /** Waits until no build started here is writing the model file, including any that replace one. */
+    async settled(file: string) {
+        while (this.running.has(file)) await this.running.get(file);
     }
 
     /** Rebuilds the model shown in the active preview. */

@@ -6,6 +6,7 @@ import { ModelCodeLensProvider } from "./ModelCodeLensProvider";
 import { PreviewEditorProvider } from "./PreviewEditorProvider";
 import { PartsView } from "./PartsView";
 import { SwiftPackage } from "./SwiftPackage";
+import { Slicer } from "./Slicer";
 
 export function activate(context: vscode.ExtensionContext) {
     const output = vscode.window.createOutputChannel("Cadova");
@@ -34,6 +35,15 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand("cadova.buildModel", (request: BuildRequest) => previewBuilds.build(request)),
         vscode.commands.registerCommand("cadova.buildAndPreviewModel", (request: BuildRequest) => previewBuilds.buildAndPreview(request)),
         vscode.commands.registerCommand("cadova.rebuildPreview", () => previewBuilds.rebuildActive()),
+        // From the preview's editor actions, which name its file, or from the command palette
+        vscode.commands.registerCommand("cadova.slice", async (uri?: vscode.Uri) => {
+            const file = uri?.fsPath ?? preview.activeModelFile;
+            if (!file) return;
+            // A model being regenerated is sliced once it's written
+            await previewBuilds.settled(file);
+            await Slicer.open(file);
+        }),
+        vscode.commands.registerCommand("cadova.chooseSlicer", () => Slicer.choose()),
     );
 }
 

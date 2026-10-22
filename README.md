@@ -10,6 +10,7 @@ Generate and preview [Cadova](https://github.com/tomasf/Cadova) models without l
 - The Model view in the Explorer sidebar lists the parts of the model in the active preview with thumbnails, like Cadova Viewer's parts list. Click a part's checkmark to show or hide it (Option-click to show only that part), hover it to outline it in the preview, and double-click it to center the view on it. Select several with Command-click or Shift-click, press Space to show or hide them, and right-click for Center View, Show Only and Copy Part Names. The view's menu switches between small and large icons. Below the parts, it lists the preview's measurements with their coordinates and lengths; right-click one to copy or delete it.
 - The Measure button measures the model, as in Cadova Viewer: click a point, then another, to measure the length between them. Hold Command (Control) to snap to the nearest corner, Shift to keep the line along an axis, or Option (Alt) to center it on the first point. Escape cancels.
 - The scissors button in the view's top left corner adds a cross-section, up to eight. Drag the gizmo's arrow to move the cut and its rings to tilt it (hold Shift for world axes, Option to turn in 22.5° steps), or use the bar along the bottom to flip it or align it to an axis. Each section's chip turns it on and off or selects it for editing. Cut faces are filled in the part's color, and measurements can land on them.
+- The preview's Slice button opens the model in your slicer, as in Cadova Viewer. The first time, it offers the slicers it finds (PrusaSlicer, Bambu Studio, OrcaSlicer, UltiMaker Cura and SuperSlicer) or lets you browse for one; **Cadova: Choose Slicer…** changes it. Slicing isn't available in remote windows yet.
 - Saving a Swift file regenerates the models open in previews from the same package. The preview's Regenerate button (⌥⌘R) does it on demand.
 
 The preview works on every platform VS Code runs on. On macOS, [Cadova Viewer](https://github.com/tomasf/CadovaViewer) also sends models to a slicer, works with a SpaceMouse and shows models live from Cadova LiveLink.
@@ -18,6 +19,7 @@ The preview works on every platform VS Code runs on. On macOS, [Cadova Viewer](h
 
 - `cadova.swiftPath`: the `swift` executable to compile and run with, if it isn't on the `PATH` VS Code sees.
 - `cadova.buildConfiguration`: `debug` (default) or `release`.
+- `cadova.slicer`: the slicer Slice opens models in.
 - `cadova.rebuildOnSave`: turns regenerating on save off.
 - `cadova.codeLens`: turns the Generate and Preview actions off.
 

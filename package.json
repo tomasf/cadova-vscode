@@ -52,6 +52,20 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "cadova.slice",
+        "title": "Slice",
+        "category": "Cadova",
+        "icon": {
+          "light": "images/slice-light.svg",
+          "dark": "images/slice-dark.svg"
+        }
+      },
+      {
+        "command": "cadova.chooseSlicer",
+        "title": "Choose Slicer…",
+        "category": "Cadova"
+      },
+      {
         "command": "cadova.showAllParts",
         "title": "Show All Parts",
         "category": "Cadova",
@@ -119,6 +133,10 @@
           "when": "activeCustomEditorId == cadova.preview"
         },
         {
+          "command": "cadova.slice",
+          "when": "activeCustomEditorId == cadova.preview"
+        },
+        {
           "command": "cadova.showAllParts",
           "when": "cadova.hasPreview"
         },
@@ -162,6 +180,11 @@
       "editor/title": [
         {
           "command": "cadova.rebuildPreview",
+          "when": "activeCustomEditorId == cadova.preview",
+          "group": "navigation"
+        },
+        {
+          "command": "cadova.slice",
           "when": "activeCustomEditorId == cadova.preview",
           "group": "navigation"
         }
@@ -237,6 +260,12 @@
           ],
           "default": "debug",
           "description": "The configuration model packages are compiled with. Release takes longer to compile but generates complex models faster."
+        },
+        "cadova.slicer": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "The slicer that **Slice** opens models in: an app on macOS, or a program on Windows and Linux. When it's empty, Slice asks for one, offering those found in their usual places. Run **Cadova: Choose Slicer…** to change it."
         },
         "cadova.rebuildOnSave": {
           "type": "boolean",
