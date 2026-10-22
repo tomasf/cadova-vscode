@@ -176,7 +176,9 @@ class ModelViewer {
         this.container.append(this.renderer.domElement);
 
         this.scene.background = new THREE.Color(this.cssValue("--viewer"));
-        this.controls = new SectionAwareControls(this.rig.camera, this.renderer.domElement);
+        // VS Code shows no banner for a locked pointer, so drags can go on past the edge of the screen,
+        // as in Cadova Viewer
+        this.controls = new SectionAwareControls(this.rig.camera, this.renderer.domElement, { lockPointer: true });
         setupLighting(this.scene, this.rig.camera, this.renderer);
 
         // The headlight rides on the camera, so it moves to whichever camera is in use
