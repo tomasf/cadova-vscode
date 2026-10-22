@@ -17,6 +17,8 @@ export interface ViewOptions {
 export interface ToolbarActions {
     zoom(direction: 1 | -1): void;
     showPreset(preset: ViewPreset): void;
+    /** Shows a picture of a standard view below its button while it's hovered, or with null, stops. */
+    previewPreset(preset: ViewPreset | null, button?: HTMLElement): void;
     setOptions(options: ViewOptions): void;
     /** Opens the menu of what's shown, under a button. */
     showMenu(button: HTMLElement): void;
@@ -61,8 +63,19 @@ export class Toolbar {
             this.button("Zoom Out", icons.zoomOut, () => actions.zoom(-1)),
             this.button("Zoom In", icons.zoomIn, () => actions.zoom(1)),
         ]);
-        this.group((Object.keys(presetIcons) as ViewPreset[]).map((preset) =>
-            this.button(`${CameraRig.presets[preset].title} View`, presetIcons[preset], () => actions.showPreset(preset))));
+        // Hovering a view shows a picture of it below its button until the pointer leaves the views or
+        // it's chosen, going from picture to picture across the gaps between buttons. The picture
+        // names the view, so the buttons have no tooltips of their own. A touch has no hover.
+        const views = this.group((Object.keys(presetIcons) as ViewPreset[]).map((preset) => {
+            const button = this.button(`${CameraRig.presets[preset].title} View`, presetIcons[preset], () => {
+                actions.previewPreset(null);
+                actions.showPreset(preset);
+            });
+            button.removeAttribute("title");
+            button.addEventListener("pointerenter", (event) => { if (event.pointerType === "mouse") actions.previewPreset(preset, button); });
+            return button;
+        }));
+        views.addEventListener("pointerleave", (event) => { if (event.pointerType === "mouse") actions.previewPreset(null); });
         // One projection is always chosen, so the chosen one is marked quietly
         this.group([
             this.choice("Perspective", icons.perspective, () => this.options.projection === "perspective",

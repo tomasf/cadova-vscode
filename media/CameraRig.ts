@@ -115,6 +115,25 @@ export class CameraRig {
         this.fly(this.pose(this.box, axis, up), this.box, animated);
     }
 
+    /**
+     * Runs something, such as drawing a picture of a standard view, with the camera in that view as
+     * it would frame the model in a picture of the given shape, then puts the camera back. The
+     * headlight rides on the camera, so the picture is lit as the view would be.
+     */
+    withPresetView<T>(preset: ViewPreset, aspect: number, body: (camera: THREE.Camera) => T): T | undefined {
+        if (this.box.isEmpty()) return undefined;
+        const saved = { pose: this.currentPose(), aspect: this.aspect };
+        this.setAspect(aspect);
+        const { axis, up } = CameraRig.presets[preset];
+        this.apply(this.pose(this.box, axis, up));
+        try {
+            return body(this.current);
+        } finally {
+            this.setAspect(saved.aspect);
+            this.apply(saved.pose);
+        }
+    }
+
     /** Flies to frame a box, such as some of the model's parts, from the direction the view has now. */
     frame(box: THREE.Box3) {
         if (box.isEmpty()) return;

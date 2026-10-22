@@ -268,6 +268,17 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
     #stage { position: relative; flex: 1; min-height: 0; }
     #viewer { position: absolute; inset: 0; overflow: hidden; }
     #viewer canvas { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
+    /* A picture of a standard view below its toolbar button while it's hovered, like VS Code's hovers */
+    #view-callout {
+        position: fixed; z-index: 20; pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 4px;
+        padding: 4px 4px 5px; border-radius: 6px; box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, .36));
+        background: var(--vscode-editorHoverWidget-background, var(--panel));
+        border: 1px solid var(--vscode-editorHoverWidget-border, var(--line));
+        color: var(--vscode-editorHoverWidget-foreground, var(--text));
+        font-family: var(--vscode-font-family, system-ui, -apple-system, "Segoe UI", sans-serif); font-size: 11.5px;
+    }
+    #view-callout[hidden] { display: none; }
+    #view-callout canvas { display: block; border-radius: 3px; }
     /* View options in a row of their own above the view, styled like VS Code's toolbars */
     #topbar {
         display: flex; align-items: center; gap: 8px; padding: 4px 8px;
@@ -477,6 +488,7 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
 <div id="topbar">
     <div id="toolbar" role="toolbar" aria-label="View"></div>
 </div>
+<div id="view-callout" hidden><canvas></canvas><span></span></div>
 <div id="stage">
     <div id="viewer"></div>
     <div id="sections" hidden></div>

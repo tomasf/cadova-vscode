@@ -20,6 +20,7 @@ import { SurfacePicker } from "./SurfacePicker";
 import { MeasurementTool, type Measurement } from "./MeasurementTool";
 import { PlainMaterials } from "./PlainMaterials";
 import { PressTracking } from "./PressTracking";
+import { ViewCallout } from "./ViewCallout";
 
 /** What a preview remembers of its own: its view options, the parts hidden in it, by ID, and where its camera is. */
 interface PanelState {
@@ -137,6 +138,7 @@ class ModelViewer {
     private readonly highlight: PartHighlight;
     private readonly thumbnails: PartThumbnails;
     private readonly sections: CrossSectionEditor;
+    private readonly callout: ViewCallout;
     readonly measurements: MeasurementTool;
     readonly toolbar: Toolbar;
     private modelBox = new THREE.Box3();
@@ -218,6 +220,7 @@ class ModelViewer {
             activeChanged: () => this.toolbar.refresh(),
         }, saved.measurements);
         this.scene.add(this.sections.view.group, this.measurements.group, this.sections.gizmo.root);
+        this.callout = new ViewCallout(this.renderer, this.scene, this.rig, () => [this.sections.gizmo.root]);
         this.picker = picker;
         this.controls.picker = picker;
 
@@ -232,6 +235,10 @@ class ModelViewer {
                 this.controls.animateZoom(direction * Math.log(1.5), this.viewCenter());
             },
             showPreset: (preset) => this.showPreset(preset),
+            previewPreset: (preset, button) => {
+                if (preset && button && this.hasModel) this.callout.show(preset, button);
+                else this.callout.hide();
+            },
             setOptions: (next) => {
                 this.apply(next);
                 events.optionsChanged(next);
