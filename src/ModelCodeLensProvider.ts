@@ -23,15 +23,18 @@ export class ModelCodeLensProvider implements vscode.CodeLensProvider {
                 file: document.uri, filterNames: declaration.filterName ? [declaration.filterName] : undefined,
             };
             const what = declaration.kind === "project" ? "All" : "";
+            // Code lenses are drawn as web text, where spaces in a row collapse into one, so a wider
+            // gap after the icon needs a non-breaking space
+            const gap = "\u00A0";
             return [
                 new vscode.CodeLens(range, {
-                    title: `$(play) Generate ${what}`.trimEnd(),
+                    title: `$(play)${gap}Generate ${what}`.trimEnd(),
                     tooltip: declaration.filterName ? `Generate ${declaration.filterName}, compiling the package first` : "Generate every model in the project, compiling the package first",
                     command: "cadova.buildModel",
                     arguments: [request],
                 }),
                 new vscode.CodeLens(range, {
-                    title: `$(eye) Preview ${what}`.trimEnd(),
+                    title: `$(eye)${gap}Preview ${what}`.trimEnd(),
                     tooltip: "Generate, then show the result beside the code",
                     command: "cadova.buildAndPreviewModel",
                     arguments: [request],
