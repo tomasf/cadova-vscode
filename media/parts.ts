@@ -2,6 +2,7 @@
 // name and a checkmark that shows or hides it, selecting like a VS Code list, and the measurements.
 
 import { Palette } from "./Palette";
+import { PressTracking } from "./PressTracking";
 
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void };
 
@@ -330,5 +331,6 @@ class MeasurementsList {
     }
 }
 
+new PressTracking();
 new PartsList();
 new MeasurementsList();

@@ -19,6 +19,7 @@ import type { CrossSection } from "./CrossSection";
 import { SurfacePicker } from "./SurfacePicker";
 import { MeasurementTool, type Measurement } from "./MeasurementTool";
 import { PlainMaterials } from "./PlainMaterials";
+import { PressTracking } from "./PressTracking";
 
 /** What a preview remembers of its own: its view options, the parts hidden in it, by ID, and where its camera is. */
 interface PanelState {
@@ -607,6 +608,7 @@ class ModelViewer {
 THREE.Object3D.DEFAULT_UP.set(0, 0, 1);
 const vscode = acquireVsCodeApi();
 const status = new StatusPill();
+new PressTracking();
 
 // Each preview keeps its own options, and starts from the last ones chosen in any preview
 const defaultOptions: ViewOptions = {

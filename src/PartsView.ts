@@ -219,6 +219,11 @@ export class PartsView implements vscode.WebviewViewProvider, vscode.Disposable 
         color: var(--vscode-descriptionForeground); cursor: pointer; display: grid; place-items: center; border-radius: 4px;
     }
     .measurement .delete:hover { color: var(--vscode-foreground); background: var(--vscode-toolbar-hoverBackground); }
+    /* Held down, like a native control, darker in a light theme and lighter in a dark one */
+    .measurement .delete.pressed {
+        background-color: var(--vscode-toolbar-hoverBackground);
+        background-image: linear-gradient(color-mix(in srgb, currentColor 18%, transparent), color-mix(in srgb, currentColor 18%, transparent));
+    }
 </style>
 </head>
 <body class="${this.iconSize}">

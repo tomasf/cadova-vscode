@@ -293,19 +293,26 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
         background: transparent; color: var(--vscode-icon-foreground, var(--text)); cursor: pointer;
         display: grid; place-items: center; font: inherit;
     }
-    .toolbar-group button:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, .2)); }
-    .toolbar-group button:active { background: var(--vscode-toolbar-activeBackground, rgba(128, 128, 128, .3)); }
+    .toolbar-group button:hover { background-color: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, .2)); }
     /* An option that's on looks like the toggles in VS Code's find widget */
     .toolbar-group button[aria-pressed="true"] {
-        background: var(--vscode-inputOption-activeBackground, var(--accent-soft));
+        background-color: var(--vscode-inputOption-activeBackground, var(--accent-soft));
         border-color: var(--vscode-inputOption-activeBorder, transparent);
         color: var(--vscode-inputOption-activeForeground, var(--accent));
     }
     /* In a group where one is always chosen, the chosen one is only shaded, like a pressed button */
     .toolbar-group.picker button[aria-pressed="true"] {
-        background: var(--vscode-toolbar-activeBackground, rgba(128, 128, 128, .25));
+        background-color: var(--vscode-toolbar-activeBackground, rgba(128, 128, 128, .25));
         border-color: transparent; color: var(--vscode-icon-foreground, var(--text));
     }
+    /*
+     * Held down, a control gets a layer of its own text color over whatever it shows, darker in a
+     * light theme and lighter in a dark one, whether it's on, off or filled. Filled buttons in the
+     * theme's button color get a dark layer instead, as native ones darken.
+     */
+    :root { --pressed-layer: linear-gradient(color-mix(in srgb, currentColor 18%, transparent), color-mix(in srgb, currentColor 18%, transparent)); }
+    .toolbar-group button.pressed, .section-chip button.pressed, .section-add.pressed { background-image: var(--pressed-layer); }
+    .toolbar-group button.pressed:not([aria-pressed="true"]) { background-color: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, .2)); }
     .toolbar-group button:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: -1px; }
     .toolbar-group svg {
         width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5;
@@ -342,6 +349,9 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
     .section-chip button.scissors { padding: 0 7px 0 4px; }
     .section-chip svg { width: 15px; height: 15px; }
     .section-chip.disabled button.scissors { opacity: .6; }
+    .section-chip button:hover, .section-add:hover {
+        background-image: linear-gradient(color-mix(in srgb, currentColor 10%, transparent), color-mix(in srgb, currentColor 10%, transparent));
+    }
     .section-chip.selected { background: var(--section); color: #000; --chip-check: var(--section); }
     .section-add {
         height: 28px; padding: 0 7px; margin-left: 4px; border-radius: 8px; cursor: pointer; display: grid; place-items: center;
@@ -371,10 +381,12 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
         color: var(--vscode-button-secondaryForeground, var(--text)); background: var(--vscode-button-secondaryBackground, rgba(128, 128, 128, .25));
         border: 1px solid var(--vscode-button-border, transparent);
     }
-    #section-bar button:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground, rgba(128, 128, 128, .35)); }
+    #section-bar button:hover:not(:disabled) { background-color: var(--vscode-button-secondaryHoverBackground, rgba(128, 128, 128, .35)); }
     #section-bar button:disabled { opacity: .4; cursor: default; }
     #section-bar button.primary { color: var(--vscode-button-foreground, #fff); background: var(--vscode-button-background, #0078d4); }
-    #section-bar button.primary:hover { background: var(--vscode-button-hoverBackground, #026ec1); }
+    #section-bar button.primary:hover { background-color: var(--vscode-button-hoverBackground, #026ec1); }
+    #section-bar button.pressed:not(:disabled) { background-image: var(--pressed-layer); }
+    #section-bar button.primary.pressed { background-image: linear-gradient(rgba(0, 0, 0, .2), rgba(0, 0, 0, .2)); }
     #section-bar button.bar-delete { padding: 0 5px; display: grid; place-items: center; }
     #section-bar button.bar-delete svg { width: 15px; height: 15px; }
     #section-bar .switch {
@@ -386,6 +398,10 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
     }
     #section-bar .switch:checked { background: var(--vscode-button-background, #0078d4); }
     #section-bar .switch:checked::after { left: 15px; }
+    /* Held down, the knob stretches toward where it would go, as a native switch's does */
+    #section-bar .switch.pressed::after { width: 16px; }
+    #section-bar .switch.pressed:checked::after { left: 12px; }
+    #section-bar .switch.pressed { background-image: linear-gradient(rgba(0, 0, 0, .12), rgba(0, 0, 0, .12)); }
     /* Measuring: a crosshair, and the length being measured next to it */
     #viewer canvas.measuring { cursor: crosshair; }
     #measure-readout {
@@ -444,6 +460,7 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
         background: var(--vscode-menu-selectionBackground, var(--accent));
         color: var(--vscode-menu-selectionForeground, #ffffff);
     }
+    .menu-item.pressed { background-image: linear-gradient(rgba(0, 0, 0, .18), rgba(0, 0, 0, .18)); }
     .menu-item[aria-disabled="true"] { opacity: .45; }
     .menu-item[aria-disabled="true"]:hover { background: none; color: inherit; }
     .menu-item .check { text-align: center; }
