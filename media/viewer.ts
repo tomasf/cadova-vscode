@@ -18,6 +18,7 @@ import { CrossSectionEditor } from "./CrossSectionEditor";
 import type { CrossSection } from "./CrossSection";
 import { SurfacePicker } from "./SurfacePicker";
 import { MeasurementTool, type Measurement } from "./MeasurementTool";
+import { PlainMaterials } from "./PlainMaterials";
 
 /** What a preview remembers of its own: its view options, the parts hidden in it, by ID, and where its camera is. */
 interface PanelState {
@@ -372,6 +373,8 @@ class ModelViewer {
         this.origin.visible = options.showOrigin && this.hasModel;
         this.axisIndicator.element.style.visibility = options.showAxisDirections ? "" : "hidden";
         this.info.visible = options.showInfo && this.hasModel;
+        if (this.current) PlainMaterials.show(this.current, !options.materials, this.modelColor);
+        this.sections.view.setPlain(!options.materials);
         this.current?.traverse((child) => {
             if (!(child instanceof THREE.Mesh)) return;
             for (const material of Array.isArray(child.material) ? child.material : [child.material]) {
@@ -467,12 +470,17 @@ class ModelViewer {
             : { label: "Show All", action: () => this.setHiddenParts(new Set()) };
     }
 
-    // The toggles for what's shown besides the model, named as in Cadova Viewer's View menu
+    // The toggles for what's shown, named as in Cadova Viewer's View menu. Materials only does
+    // anything for a model with some.
     private viewToggleItems(): MenuItem[] {
-        const toggle = (label: string, key: "showGrid" | "showOrigin" | "showAxisDirections"): MenuItem => ({
+        const toggle = (label: string, key: "materials" | "showGrid" | "showOrigin" | "showAxisDirections"): MenuItem => ({
             label, checked: this.options[key], action: () => this.toolbar.set({ [key]: !this.options[key] }),
         });
-        return [toggle("Grid", "showGrid"), toggle("Origin", "showOrigin"), toggle("Axis Directions", "showAxisDirections")];
+        const hasMaterials = !!this.current && PlainMaterials.hasMaterials(this.current, this.modelColor);
+        return [
+            { ...toggle("Materials", "materials"), checked: this.options.materials && hasMaterials, disabled: !hasMaterials },
+            toggle("Grid", "showGrid"), toggle("Origin", "showOrigin"), toggle("Axis Directions", "showAxisDirections"),
+        ];
     }
 
     // The toolbar's Show menu, which is also the context menu's: what's shown besides the model, then
@@ -568,6 +576,11 @@ class ModelViewer {
         this.invalidate();
     }
 
+    // The color of a part without one of its own, which is also how every part looks with materials off
+    private get modelColor(): THREE.Color {
+        return new THREE.Color(this.cssValue("--model"));
+    }
+
     private cssValue(name: string): string {
         return getComputedStyle(this.root).getPropertyValue(name).trim();
     }
@@ -597,7 +610,7 @@ const status = new StatusPill();
 
 // Each preview keeps its own options, and starts from the last ones chosen in any preview
 const defaultOptions: ViewOptions = {
-    projection: "perspective", smoothShading: true, edges: "sharp",
+    projection: "perspective", smoothShading: true, materials: true, edges: "sharp",
     showGrid: true, showOrigin: true, showAxisDirections: true, showInfo: false,
 };
 const state: PanelState = vscode.getState() ?? {};

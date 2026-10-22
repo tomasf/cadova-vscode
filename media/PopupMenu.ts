@@ -4,6 +4,8 @@ export interface MenuItem {
     /** A picture before the label, such as a part's thumbnail, as an image URL; empty keeps its place. */
     icon?: string;
     checked?: boolean;
+    /** Shown greyed out, and does nothing when chosen. */
+    disabled?: boolean;
     action?: () => void;
     submenu?: MenuEntry[];
     alternate?: { checked?: boolean; action: () => void };
@@ -114,6 +116,7 @@ export class PopupMenu {
 
             const row = document.createElement("div");
             row.className = "menu-item";
+            if (entry.disabled) row.setAttribute("aria-disabled", "true");
             row.setAttribute("role", entry.checked === undefined ? "menuitem" : "menuitemcheckbox");
             row.append(
                 PopupMenu.span("check normal", entry.checked ? "✓" : ""),
@@ -134,7 +137,7 @@ export class PopupMenu {
                 if (this.hovered === entry) this.setHovered(null);
             });
             row.addEventListener("click", (event) => {
-                if (entry.submenu) return;
+                if (entry.submenu || entry.disabled) return;
                 this.close();
                 if (event.altKey && entry.alternate) entry.alternate.action();
                 else entry.action?.();

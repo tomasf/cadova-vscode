@@ -41,6 +41,10 @@ export class CrossSectionView {
     private ghostFade: { start: number; hold: number } | null = null;
     private scene: SectionScene = { sections: [], hiddenParts: new Set(), focused: null, planeShown: null };
     private dirty = false;
+    // With materials off, cut faces are white with a grey hatch, as in Cadova Viewer
+    private plain = false;
+    private static readonly plainFill = new THREE.Color(1, 1, 1);
+    private static readonly plainHatch = new THREE.Color(0.6, 0.6, 0.6);
 
     constructor() {
         this.capGroup.name = "cross-section caps";
@@ -82,6 +86,13 @@ export class CrossSectionView {
 
     update(scene: SectionScene) {
         this.scene = scene;
+        this.dirty = true;
+    }
+
+    /** Shows cut faces plain, for when the model's materials are off, or in their parts' colors. */
+    setPlain(plain: boolean) {
+        if (plain === this.plain) return;
+        this.plain = plain;
         this.dirty = true;
     }
 
@@ -161,7 +172,8 @@ export class CrossSectionView {
                 present.add(key);
                 // Each cut face is trimmed by the other sections, not its own
                 cap.material.clippingPlanes = others;
-                cap.material.hatch.hatchColor.value.copy(new THREE.Color(Palette.css(section.colorIndex)));
+                cap.material.color.copy(this.plain ? CrossSectionView.plainFill : color);
+                cap.material.hatch.hatchColor.value.copy(this.plain ? CrossSectionView.plainHatch : new THREE.Color(Palette.css(section.colorIndex)));
                 cap.material.hatch.hatchDirection.value.copy(SectionGeometry.hatchDirection(section));
                 cap.material.hatch.hatchSpacing.value = spacing;
                 cap.material.hatch.hatchStrength.value = strength;

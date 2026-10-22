@@ -444,6 +444,8 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
         background: var(--vscode-menu-selectionBackground, var(--accent));
         color: var(--vscode-menu-selectionForeground, #ffffff);
     }
+    .menu-item[aria-disabled="true"] { opacity: .45; }
+    .menu-item[aria-disabled="true"]:hover { background: none; color: inherit; }
     .menu-item .check { text-align: center; }
     .menu-item .label { display: flex; align-items: center; gap: 6px; }
     .menu-item .icon { width: 24px; height: 24px; flex: none; }

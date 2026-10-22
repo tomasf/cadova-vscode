@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { PlainMaterials } from "./PlainMaterials";
 
 // Big enough for Cadova Viewer's large sidebar icons, 32 points, on a 2× display
 const size = 64;
@@ -109,7 +110,8 @@ export class PartThumbnails {
         renderer.setClearColor(0x000000, 0);
         renderer.setRenderTarget(this.target);
         renderer.clear();
-        renderer.render(this.scene, this.camera);
+        // In the part's own colors, even while the view shows it plain
+        PlainMaterials.withOwnMaterials(copy, () => renderer.render(this.scene, this.camera));
         renderer.localClippingEnabled = clipping;
         renderer.readRenderTargetPixels(this.target, 0, 0, size, size, this.pixels);
         renderer.setRenderTarget(null);

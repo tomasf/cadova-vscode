@@ -5,6 +5,8 @@ import type { EdgeVisibility } from "./EdgeOverlay";
 export interface ViewOptions {
     projection: Projection;
     smoothShading: boolean;
+    /** Whether parts show their own colors and materials, or all look plain. */
+    materials: boolean;
     edges: EdgeVisibility;
     showGrid: boolean;
     showOrigin: boolean;
