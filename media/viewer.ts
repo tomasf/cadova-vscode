@@ -57,7 +57,6 @@ interface ViewerEvents {
 type HostMessage =
     | { type: "model"; name: string; data: ModelData }
     | { type: "error"; message: string }
-    | { type: "fit" }
     | { type: "options"; options: Partial<ViewOptions> }
     | { type: "status"; status: Status }
     | { type: "hiddenParts"; hidden: string[] }
@@ -653,9 +652,6 @@ window.addEventListener("message", ({ data }: MessageEvent<HostMessage>) => {
             break;
         case "error":
             viewer?.showMessage(data.message);
-            break;
-        case "fit":
-            viewer?.showPreset("isometric");
             break;
         case "hiddenParts":
             viewer?.setHiddenParts(new Set(data.hidden));

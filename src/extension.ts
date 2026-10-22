@@ -34,7 +34,6 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand("cadova.buildModel", (request: BuildRequest) => previewBuilds.build(request)),
         vscode.commands.registerCommand("cadova.buildAndPreviewModel", (request: BuildRequest) => previewBuilds.buildAndPreview(request)),
         vscode.commands.registerCommand("cadova.rebuildPreview", () => previewBuilds.rebuildActive()),
-        vscode.commands.registerCommand("cadova.fitPreview", () => preview.fitActive()),
     );
 }
 

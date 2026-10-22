@@ -120,10 +120,6 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
         this.activePanel?.webview.postMessage({ type: "frameParts", ids });
     }
 
-    fitActive() {
-        this.activePanel?.webview.postMessage({ type: "fit" });
-    }
-
     /** The model file shown in the active preview. */
     get activeModelFile(): string | undefined {
         for (const [key, panels] of this.panels) {

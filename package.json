@@ -52,12 +52,6 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "cadova.fitPreview",
-        "title": "Fit Model in View",
-        "category": "Cadova",
-        "icon": "$(screen-full)"
-      },
-      {
         "command": "cadova.showAllParts",
         "title": "Show All Parts",
         "category": "Cadova",
@@ -121,10 +115,6 @@
           "when": "false"
         },
         {
-          "command": "cadova.fitPreview",
-          "when": "activeCustomEditorId == cadova.preview"
-        },
-        {
           "command": "cadova.rebuildPreview",
           "when": "activeCustomEditorId == cadova.preview"
         },
@@ -172,11 +162,6 @@
       "editor/title": [
         {
           "command": "cadova.rebuildPreview",
-          "when": "activeCustomEditorId == cadova.preview",
-          "group": "navigation"
-        },
-        {
-          "command": "cadova.fitPreview",
           "when": "activeCustomEditorId == cadova.preview",
           "group": "navigation"
         }
