@@ -67,16 +67,25 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
     }
 
     /** Shows the file beside the active editor, or brings its preview forward if it's already open. */
-    async show(file: vscode.Uri) {
+    async show(file: vscode.Uri, { keepTab = false } = {}) {
         const existing = this.panels.get(file.toString())?.values().next().value;
         if (existing) {
             existing.reveal(existing.viewColumn, true);
             await this.load(file, existing, true);
         } else {
+            // A preview tab, in VS Code's sense, is replaced by the next file opened, unless it's kept
             await vscode.commands.executeCommand("vscode.openWith", file, PreviewEditorProvider.viewType, {
-                viewColumn: vscode.ViewColumn.Beside, preserveFocus: true,
+                viewColumn: vscode.ViewColumn.Beside, preserveFocus: true, ...(keepTab ? { preview: false } : {}),
             });
         }
+    }
+
+    /** Shows several files beside the active editor, each in a tab of its own, the first in front. */
+    async showAll(files: vscode.Uri[]) {
+        if (files.length === 1) return this.show(files[0]);
+        for (const file of files) await this.show(file, { keepTab: true });
+        const first = this.panels.get(files[0]?.toString())?.values().next().value;
+        first?.reveal(first.viewColumn, true);
     }
 
     /**

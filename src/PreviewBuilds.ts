@@ -20,14 +20,12 @@ export class PreviewBuilds implements vscode.Disposable {
         this.disposables.push(vscode.workspace.onDidSaveTextDocument((document) => this.documentSaved(document)));
     }
 
-    /** Builds the request, then shows the first model file it wrote. */
+    /** Builds the request, then shows every model file it wrote, each in a tab of its own. */
     async buildAndPreview(request: BuildRequest) {
         const result = await this.build(request);
         if (result.outcome !== "succeeded") return;
-        // Building a project can write many files; the first is shown, and any others already open
-        // update themselves
-        const first = result.written.find((file) => file.toLowerCase().endsWith(".3mf"));
-        if (first) await this.previews.show(vscode.Uri.file(first));
+        const models = result.written.filter((file) => file.toLowerCase().endsWith(".3mf"));
+        if (models.length) await this.previews.showAll(models.map((file) => vscode.Uri.file(file)));
     }
 
     /**
