@@ -4,9 +4,10 @@ import { HatchMaterial } from "./HatchMaterial";
 import { Palette } from "./Palette";
 import { PartSolid } from "./PartSolid";
 
-// How a cut-away part shows while a section is being moved: Cadova Viewer's ghost opacities
-const ghostFillOpacity = 0.1;
-const ghostEdgeOpacity = 0.4;
+// How a cut-away part shows while a section is being moved. Cadova Viewer's numbers are 0.1 and 0.4,
+// but SceneKit draws them far fainter than they suggest, so these are what it looks like instead
+const ghostFillOpacity = 0.05;
+const ghostEdgeOpacity = 0.14;
 
 /** What the cross-sections are drawn for: the model, its parts, and which section is focused. */
 export interface SectionScene {
@@ -222,20 +223,35 @@ export class CrossSectionView {
         for (const part of model.children) {
             const copy = part.clone(true);
             copy.userData.ghostPart = part.userData.partNumber ?? part.name;
+            const meshes: THREE.Mesh[] = [];
             copy.traverse((child) => {
-                child.renderOrder = 90;
                 if (child instanceof THREE.LineSegments) {
+                    child.renderOrder = 90;
                     child.material = new THREE.LineBasicMaterial({
                         color: 0xffffff, transparent: true, opacity: ghostEdgeOpacity, depthWrite: false, toneMapped: false,
                         clippingPlanes: this.ghostPlanes, clipIntersection: true,
                     });
                 } else if (child instanceof THREE.Mesh) {
-                    child.material = new THREE.MeshBasicMaterial({
-                        color: 0xffffff, transparent: true, opacity: ghostFillOpacity, depthWrite: false, side: THREE.DoubleSide,
-                        toneMapped: false, clippingPlanes: this.ghostPlanes, clipIntersection: true,
-                    });
+                    meshes.push(child);
                 }
             });
+            // As in Cadova Viewer, only the nearest layer of the ghost is filled, so parts behind or
+            // inside others don't stack up: each surface first only marks how near it is, after the
+            // edges, which show through, and then only the nearest one at each point is drawn
+            for (const mesh of meshes) {
+                mesh.renderOrder = 91;
+                mesh.material = new THREE.MeshBasicMaterial({
+                    transparent: true, colorWrite: false, depthWrite: true, side: THREE.DoubleSide,
+                    clippingPlanes: this.ghostPlanes, clipIntersection: true,
+                });
+                const fill = new THREE.Mesh(mesh.geometry, new THREE.MeshBasicMaterial({
+                    color: 0xffffff, transparent: true, opacity: ghostFillOpacity, depthWrite: false, depthFunc: THREE.EqualDepth,
+                    side: THREE.DoubleSide, toneMapped: false, clippingPlanes: this.ghostPlanes, clipIntersection: true,
+                }));
+                fill.renderOrder = 92;
+                fill.userData.ghostFill = true;
+                mesh.add(fill);
+            }
             ghost.add(copy);
         }
         this.group.add(ghost);
@@ -258,7 +274,7 @@ export class CrossSectionView {
     private setGhostOpacity(factor: number) {
         this.ghost?.traverse((child) => {
             if (child instanceof THREE.LineSegments) (child.material as THREE.Material).opacity = ghostEdgeOpacity * factor;
-            else if (child instanceof THREE.Mesh) (child.material as THREE.Material).opacity = ghostFillOpacity * factor;
+            else if (child.userData.ghostFill) ((child as THREE.Mesh).material as THREE.Material).opacity = ghostFillOpacity * factor;
         });
     }
 
