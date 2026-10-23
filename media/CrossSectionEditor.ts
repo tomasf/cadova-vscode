@@ -14,6 +14,8 @@ export interface SectionHost {
     worldPerPixel(point: THREE.Vector3): number;
     /** Called when the sections change, to remember them. */
     sectionsChanged(sections: CrossSection[]): void;
+    /** Called when a section starts or stops being edited. */
+    editingChanged(editing: boolean): void;
 }
 
 interface Drag {
@@ -53,6 +55,7 @@ export class CrossSectionEditor {
     // What the chips and the bar last showed, so they're only rebuilt when that changes
     private chipsShown = "";
     private barShown = "";
+    private editing = false;
 
     constructor(private readonly host: SectionHost, sections: CrossSection[]) {
         this.sections = sections;
@@ -141,6 +144,10 @@ export class CrossSectionEditor {
     /** Updates the drawing, the gizmo and the controls, such as for a new model or hidden parts. */
     refresh() {
         const section = this.current;
+        if (!!section !== this.editing) {
+            this.editing = !!section;
+            this.host.editingChanged(this.editing);
+        }
         this.view.update({
             sections: this.sections, hiddenParts: this.host.hiddenParts,
             focused: this.hovered ?? this.selected, planeShown: this.selected ?? this.hovered,

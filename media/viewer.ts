@@ -133,6 +133,8 @@ class ModelViewer {
     private readonly grid: ViewportGrid;
     // The grid hides itself when it's seen edge-on, so showing it is up to a group around it
     private readonly gridHolder = new THREE.Group();
+    // A section being edited is easier to see without the grid
+    private editingSection = false;
     private readonly origin = new OriginAxes();
     private readonly axisIndicator: AxisIndicator;
     private readonly highlight: PartHighlight;
@@ -209,6 +211,10 @@ class ModelViewer {
             get hiddenParts() { return viewer.hiddenParts; },
             worldPerPixel: (point) => this.worldPerPixel(point),
             sectionsChanged: (sections) => events.sectionsChanged(sections),
+            editingChanged: (editing) => {
+                this.editingSection = editing;
+                this.showGrid();
+            },
         }, saved.sections);
         const picker = new SurfacePicker({
             get camera() { return viewer.rig.camera; },
@@ -379,7 +385,7 @@ class ModelViewer {
         this.toolbar?.update(options);
         this.rig.setProjection(options.projection);
         this.edges?.show(options.edges);
-        this.gridHolder.visible = options.showGrid;
+        this.showGrid();
         this.origin.visible = options.showOrigin && this.hasModel;
         this.axisIndicator.element.style.visibility = options.showAxisDirections ? "" : "hidden";
         this.info.visible = options.showInfo && this.hasModel;
@@ -569,6 +575,11 @@ class ModelViewer {
             press = null;
             if (!moved) PopupMenu.show(this.contextMenuEntries(event.clientX, event.clientY), event.clientX, event.clientY);
         });
+    }
+
+    private showGrid() {
+        this.gridHolder.visible = this.options.showGrid && !this.editingSection;
+        this.invalidate();
     }
 
     private worldPerPixel(point: THREE.Vector3): number {
