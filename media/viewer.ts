@@ -63,6 +63,7 @@ interface ViewerEvents {
 type HostMessage =
     | { type: "model"; name: string; data: ModelData }
     | { type: "error"; message: string }
+    | { type: "lockPointer"; on: boolean }
     | { type: "options"; options: Partial<ViewOptions> }
     | { type: "status"; status: Status }
     | { type: "hiddenParts"; hidden: string[] }
@@ -179,8 +180,10 @@ class ModelViewer {
 
         this.scene.background = new THREE.Color(this.cssValue("--viewer"));
         // VS Code shows no banner for a locked pointer, so drags can go on past the edge of the screen,
-        // as in Cadova Viewer
+        // as in Cadova Viewer, unless the cadova.lockPointer setting is off. The controls only listen
+        // for the lock when they're made with it, so they always are, and the setting then applies.
         this.controls = new SectionAwareControls(this.rig.camera, this.renderer.domElement, { lockPointer: true });
+        this.controls.lockPointer = document.body.dataset.lockPointer !== "false";
         setupLighting(this.scene, this.rig.camera, this.renderer);
 
         // The headlight rides on the camera, so it moves to whichever camera is in use
@@ -367,6 +370,11 @@ class ModelViewer {
     /** Draws the view over the next while, for a change that doesn't move the camera. */
     invalidate() {
         this.redrawUntil = performance.now() + ModelViewer.redrawGrace;
+    }
+
+    /** Turns locking the pointer while dragging on or off, from the next drag on. */
+    setLockPointer(on: boolean) {
+        this.controls.lockPointer = on;
     }
 
     showMessage(text: string) {
@@ -700,6 +708,9 @@ window.addEventListener("message", ({ data }: MessageEvent<HostMessage>) => {
             break;
         case "options":
             if (!ownOptions) viewer?.apply({ ...defaultOptions, ...data.options });
+            break;
+        case "lockPointer":
+            viewer?.setLockPointer(data.on);
             break;
         case "error":
             viewer?.showMessage(data.message);

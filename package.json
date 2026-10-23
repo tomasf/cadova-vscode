@@ -278,6 +278,12 @@
           "scope": "machine",
           "markdownDescription": "The slicer that **Slice** opens models in: an app on macOS, or a program on Windows and Linux. When it's empty, Slice asks for one, offering those found in their usual places. Run **Cadova: Choose Slicer…** to change it."
         },
+        "cadova.lockPointer": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine",
+          "description": "Hide the pointer while dragging the preview's view, so the drag can go on past the edge of the screen. Turn this off if dragging doesn't move the view, as can happen in some virtual machines and on some Linux desktops."
+        },
         "cadova.rebuildOnSave": {
           "type": "boolean",
           "default": true,

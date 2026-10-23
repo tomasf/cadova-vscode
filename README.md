@@ -30,5 +30,6 @@ The preview works on every platform VS Code runs on. On macOS, [Cadova Viewer](h
 - `cadova.swiftPath`: the `swift` executable to compile and run with, if it isn't on the `PATH` VS Code sees.
 - `cadova.buildConfiguration`: `debug` (default) or `release`.
 - `cadova.slicer`: the slicer Slice opens models in.
+- `cadova.lockPointer`: hides the pointer while dragging the view, so the drag can go on past the edge of the screen. Turn it off if dragging doesn't move the view, as can happen in some virtual machines and on some Linux desktops.
 - `cadova.rebuildOnSave`: turns regenerating on save off.
 - `cadova.codeLens`: turns the Generate and Preview actions off.

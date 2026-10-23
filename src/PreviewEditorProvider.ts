@@ -63,7 +63,19 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
             webviewOptions: { retainContextWhenHidden: true },
             supportsMultipleEditorsPerDocument: true,
         }));
+        // Open previews follow the setting at once
+        context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((event) => {
+            if (!event.affectsConfiguration("cadova.lockPointer")) return;
+            for (const panels of provider.panels.values()) {
+                for (const panel of panels) panel.webview.postMessage({ type: "lockPointer", on: PreviewEditorProvider.lockPointer });
+            }
+        }));
         return provider;
+    }
+
+    // Whether dragging the view locks the pointer, which some virtual machines and Linux desktops can't do
+    private static get lockPointer(): boolean {
+        return vscode.workspace.getConfiguration("cadova").get("lockPointer", true);
     }
 
     /** Shows the file beside the active editor, or brings its preview forward if it's already open. */
@@ -493,7 +505,7 @@ export class PreviewEditorProvider implements vscode.CustomReadonlyEditorProvide
     .menu.alternate .alternate { display: inline; }
 </style>
 </head>
-<body>
+<body data-lock-pointer="${PreviewEditorProvider.lockPointer}">
 <div id="topbar">
     <div id="toolbar" role="toolbar" aria-label="View"></div>
 </div>
