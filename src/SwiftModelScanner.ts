@@ -1,6 +1,6 @@
-/** A `Model` or `Project` found in Swift source, which can be built on its own. */
+/** A `Model`, `Group` or `Project` found in Swift source, which can be built on its own. */
 export interface ModelDeclaration {
-    kind: "model" | "project";
+    kind: "model" | "group" | "project";
     /** Where the declaration's keyword starts, as an offset into the source. */
     offset: number;
     /**
@@ -8,17 +8,27 @@ export interface ModelDeclaration {
      * groups it's in. Absent for a project, which builds all of its models.
      */
     filterName?: string;
+    /** A group's own name, if it has one. */
+    name?: string;
+    /**
+     * The filter names of the models in a group, which build it: Cadova's filter takes model names,
+     * not group names.
+     */
+    filterNames?: string[];
 }
 
 interface GroupScope {
     name: string | null;
     braceDepth: number;
+    // The group's own declaration, unless its name is only known when it runs
+    declaration: ModelDeclaration | null;
 }
 
 /**
- * Finds `Model`s and `Project`s in Swift source without parsing it, by skipping comments and string
- * literals and following braces, so that a model inside `Group("name") { … }` gets the group's name too.
- * A model whose name isn't a plain string literal is left out, since its name is only known when it runs.
+ * Finds `Model`s, `Group`s and `Project`s in Swift source without parsing it, by skipping comments and
+ * string literals and following braces, so that a model inside `Group("name") { … }` gets the group's
+ * name too. A model whose name isn't a plain string literal is left out, since its name is only known
+ * when it runs, and so is a group with such a model in it, which its models' names can't build whole.
  */
 export class SwiftModelScanner {
     private index = 0;
@@ -26,15 +36,18 @@ export class SwiftModelScanner {
     private parenDepth = 0;
     private groups: GroupScope[] = [];
     // A group whose body is the next brace opened at this paren depth
-    private pendingGroup: { name: string | null; parenDepth: number } | null = null;
+    private pendingGroup: { name: string | null; offset: number; parenDepth: number } | null = null;
     private declarations: ModelDeclaration[] = [];
+    // Groups that can't be built by their models' names, for a model in them whose name isn't known
+    private readonly unbuildableGroups = new Set<ModelDeclaration>();
 
     private constructor(private readonly source: string) {}
 
     static scan(source: string): ModelDeclaration[] {
         const scanner = new SwiftModelScanner(source);
         scanner.scanCode(null);
-        return scanner.declarations;
+        return scanner.declarations.filter((declaration) => declaration.kind !== "group"
+            || (!scanner.unbuildableGroups.has(declaration) && declaration.filterNames!.length > 0));
     }
 
     /** Scans code until the given character closes it at this level, or until the end of the source. */
@@ -80,7 +93,11 @@ export class SwiftModelScanner {
 
     private openBrace() {
         if (this.pendingGroup && this.pendingGroup.parenDepth === this.parenDepth) {
-            this.groups.push({ name: this.pendingGroup.name, braceDepth: this.braceDepth });
+            const { name, offset } = this.pendingGroup;
+            const declaration: ModelDeclaration | null = name === "\0" ? null
+                : { kind: "group", offset, name: name ?? undefined, filterNames: [] };
+            if (declaration) this.declarations.push(declaration);
+            this.groups.push({ name, braceDepth: this.braceDepth, declaration });
             this.pendingGroup = null;
         }
         this.braceDepth++;
@@ -129,9 +146,11 @@ export class SwiftModelScanner {
         switch (identifier) {
             case "Model":
                 if (typeof firstArgument === "string" && !groupPath.includes("\0")) {
-                    this.declarations.push({
-                        kind: "model", offset: start, filterName: [...groupPath, firstArgument].join("/"),
-                    });
+                    const filterName = [...groupPath, firstArgument].join("/");
+                    this.declarations.push({ kind: "model", offset: start, filterName });
+                    for (const group of this.groups) group.declaration?.filterNames!.push(filterName);
+                } else {
+                    for (const group of this.groups) if (group.declaration) this.unbuildableGroups.add(group.declaration);
                 }
                 break;
             case "Project":
@@ -142,6 +161,7 @@ export class SwiftModelScanner {
                 // so it's recorded under a name no model filter can match
                 this.pendingGroup = {
                     name: firstArgument === undefined ? null : firstArgument ?? "\0",
+                    offset: start,
                     parenDepth: this.parenDepth,
                 };
                 break;

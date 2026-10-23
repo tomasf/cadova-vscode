@@ -2,7 +2,7 @@
 
 Generate and preview [Cadova](https://github.com/tomasf/Cadova) models without leaving VS Code.
 
-- **Generate and Preview** actions appear above every `Model` and `Project` in Swift files that import Cadova. They compile the package if needed, then run it to write the model files; a model's actions generate just that model, using Cadova's `--model` filter.
+- **Generate and Preview** actions appear above every `Model`, `Group` and `Project` in Swift files that import Cadova. They compile the package if needed, then run it to write the model files; a model's actions generate just that model, and a group's just the models in it, using Cadova's `--model` filter. A group gets no actions if one of its models is named by code rather than a plain string, since that model couldn't be included.
 - 3MF files open in a 3D preview that reloads whenever the file changes, so it follows new versions from anywhere: the actions above, the terminal or another editor.
 - The preview's toolbar has Cadova Viewer's basics: perspective or orthographic projection, zoom, and the standard views (isometric, front, back, left, right, top, bottom). New previews start with the options you chose last.
 - The toolbar's Show menu (the eye) turns materials, the grid, origin lines and axis directions on and off (with materials off, every part is plain white, as in Cadova Viewer), turns smooth shading on and off, and shows no edges, sharp edges or all edges. For a model with several parts, right-clicking the model lists the parts under the pointer, as in Cadova Viewer. Option-click (Alt-click) a part to show only that part; hovering one outlines it, and shows it faintly if it's hidden. Each preview remembers its hidden parts when the model is regenerated.

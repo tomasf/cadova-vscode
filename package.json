@@ -275,7 +275,7 @@
         "cadova.codeLens": {
           "type": "boolean",
           "default": true,
-          "description": "Show Generate and Preview actions above each model and project."
+          "description": "Show Generate and Preview actions above each model, group and project."
         }
       }
     },
