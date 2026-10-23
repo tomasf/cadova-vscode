@@ -2,7 +2,7 @@
   "name": "cadova",
   "displayName": "Cadova",
   "description": "Generate and preview Cadova models from VS Code.",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "publisher": "tomasf",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -10,6 +10,17 @@
     "type": "git",
     "url": "https://github.com/tomasf/cadova-vscode"
   },
+  "bugs": {
+    "url": "https://github.com/tomasf/cadova-vscode/issues"
+  },
+  "keywords": [
+    "Cadova",
+    "CAD",
+    "3MF",
+    "3D",
+    "Swift",
+    "3D printing"
+  ],
   "engines": {
     "vscode": "^1.80.0"
   },
