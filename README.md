@@ -9,6 +9,10 @@ Generate and preview [Cadova](https://github.com/tomasf/Cadova) models without l
 - A Swift toolchain, with `swift` on the `PATH` VS Code sees, or set in `cadova.swiftPath`.
 - A Swift package whose executable builds models with Cadova.
 
+## Installation
+
+In VS Code, open the Extensions view, search for **Cadova** and choose **Install**, or install it from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=tomasf.cadova).
+
 ## Features
 
 - **Generate and Preview** actions appear above every `Model`, `Group` and `Project` in your code. Generate writes just those models; Preview also opens them beside the code.
